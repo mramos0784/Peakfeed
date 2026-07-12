@@ -16,18 +16,43 @@ export interface ParsedEntry {
   image_url: string | null;
   external_id: string | null;
   confidence: "high" | "medium" | "low";
-  source: "spotify_oembed" | "url_id" | "ai";
+  source: "spotify_page" | "url_id" | "ai";
 }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Counterintuitively, identifying as a bot gets the real, pre-rendered page
+// with full meta tags. A real-browser UA gets Spotify's JS-only app shell
+// instead, which has none of the data we need until client-side JS runs.
+const CRAWLER_UA = "Mozilla/5.0 (compatible; PeakFeedBot/0.1; +https://peakfeed.app)";
+
+/**
+ * Pull one meta tag's content out of raw HTML without assuming attribute
+ * order. Real-world HTML doesn't guarantee property="..." comes before
+ * content="...", so this scans each whole <meta> tag and checks both
+ * attributes independently instead of one combined regex.
+ */
+function extractMetaContent(html: string, propertyOrName: string): string | null {
+  const metaTags = html.match(/<meta\b[^>]*>/gi) ?? [];
+  for (const tag of metaTags) {
+    const key = tag.match(/(?:property|name)=["']([^"']+)["']/i)?.[1];
+    if (key && key.toLowerCase() === propertyOrName.toLowerCase()) {
+      const content = tag.match(/content=["']([^"']*)["']/i)?.[1];
+      if (content) return content.trim();
+    }
+  }
+  return null;
+}
 
 /**
  * Turn a shared URL into a structured entry, ready for the user to confirm.
  *
  * Order of preference, cheapest and most reliable first:
- *   1. Spotify oEmbed - free, no API key, no OAuth, gives an exact title/artist.
- *   2. An ID already sitting in the URL itself (Spotify track id, Google Maps
- *      place id/cid) - free, no network call needed beyond what already happened.
+ *   1. The Spotify track page's own meta tags - free, no API key, no OAuth,
+ *      and includes a dedicated artist field (music:musician_description),
+ *      unlike Spotify's oEmbed endpoint which only returns the song title.
+ *   2. An ID already sitting in the URL itself (Google Maps place id/cid) -
+ *      free, no network call needed beyond what already happened.
  *   3. Claude, reading the page's own title/meta tags - the fallback for
  *      Instagram links, plain article links, anything with no clean id.
  *
@@ -39,19 +64,18 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export async function parseLink(url: string, hintType?: EntryType): Promise<ParsedEntry> {
   const spotify = tryExtractSpotify(url);
   if (spotify) {
-    const oembed = await trySpotifyOEmbed(url);
-    if (oembed) {
+    const meta = await fetchSpotifyTrackMeta(url);
+    if (meta) {
       return {
         type: "song",
-        title: oembed.title,
-        subtitle: oembed.artist,
-        image_url: oembed.thumbnail_url,
+        title: meta.title,
+        subtitle: meta.artist,
+        image_url: meta.thumbnail_url,
         external_id: spotify.id,
         confidence: "high",
-        source: "spotify_oembed",
+        source: "spotify_page",
       };
     }
-    // oEmbed failed (rate limited, private track, etc) but we still have the id.
     return aiExtract(url, hintType, spotify.id);
   }
 
@@ -68,20 +92,22 @@ function tryExtractSpotify(url: string): { id: string } | null {
   return match ? { id: `spotify:${match[1]}` } : null;
 }
 
-async function trySpotifyOEmbed(
+async function fetchSpotifyTrackMeta(
   url: string
 ): Promise<{ title: string; artist: string; thumbnail_url: string | null } | null> {
   try {
-    const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(5000),
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(6000),
+      headers: { "User-Agent": CRAWLER_UA },
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    // oEmbed's "title" field for tracks comes back as "Song Name" and
-    // "author_name" as the artist. Some responses combine them; split defensively.
-    const title: string = data.title ?? "Unknown";
-    const artist: string = data.author_name ?? "Unknown artist";
-    return { title, artist, thumbnail_url: data.thumbnail_url ?? null };
+    const html = await res.text();
+    const title = extractMetaContent(html, "og:title");
+    const artist = extractMetaContent(html, "music:musician_description");
+    const image = extractMetaContent(html, "og:image");
+    if (!title) return null;
+    return { title, artist: artist ?? "Unknown artist", thumbnail_url: image };
   } catch {
     return null;
   }
@@ -112,17 +138,16 @@ async function fetchPageMeta(url: string): Promise<{
     const res = await fetch(url, {
       redirect: "follow",
       signal: AbortSignal.timeout(6000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; PeakFeedBot/0.1)" },
+      headers: { "User-Agent": CRAWLER_UA },
     });
     const html = (await res.text()).slice(0, 50_000); // cap what we read
-    const grab = (re: RegExp) => html.match(re)?.[1]?.trim() ?? null;
+    const titleTag = html.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
     return {
       finalUrl: res.url || url,
-      title: grab(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ??
-        grab(/<title>([^<]+)<\/title>/i),
-      description: grab(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ??
-        grab(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i),
-      image: grab(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i),
+      title: extractMetaContent(html, "og:title") ?? titleTag,
+      description:
+        extractMetaContent(html, "og:description") ?? extractMetaContent(html, "description"),
+      image: extractMetaContent(html, "og:image"),
     };
   } catch {
     return { finalUrl: url, title: null, description: null, image: null };
@@ -135,7 +160,6 @@ async function aiExtract(
   knownId: string | null
 ): Promise<ParsedEntry> {
   const meta = await fetchPageMeta(url);
-  // A resolved short link might reveal a Google place id we couldn't see before.
   const resolvedId = knownId ?? tryExtractGoogleMapsId(meta.finalUrl);
 
   const prompt = `A user shared this link with PeakFeed, a community ranking app.
@@ -150,8 +174,8 @@ ${hintType ? `The user is adding this to their "${hintType}" list.` : "Guess whi
 Respond with ONLY a JSON object, no other text, matching this shape:
 {
   "type": "song" | "restaurant" | "venue" | "movie" | "event" | "issue" | "custom",
-  "title": string,          // song title, restaurant/venue name, movie title, etc
-  "subtitle": string | null, // artist for songs, city/neighborhood for places, year for movies
+  "title": string,
+  "subtitle": string | null,
   "confidence": "high" | "medium" | "low"
 }`;
 
