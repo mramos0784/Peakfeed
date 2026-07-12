@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+:root {
+  --rust: #5e2524;
+  --rust-deep: #4a1c1b;
+  --rust-mid: #7a3230;
+  --slate: #34495e;
+  --slate-deep: #253545;
+  --olive: #656b59;
+  --sage: #b3cb84;
+  --mist: #c3d3de;
+  --mist-light: #dce8f0;
+  --mist-dark: #a8bfcc;
+}
+
+body {
+  background: var(--mist-light);
+  color: var(--slate-deep);
+  font-family: "DM Sans", sans-serif;
+}
+
+.font-display {
+  font-family: "Bebas Neue", sans-serif;
+  letter-spacing: 0.03em;
+}
