@@ -1,12 +1,13 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ListBoard from "@/components/ListBoard";
 
+// Auth is enforced once by the shared (app)/layout.tsx, not re-checked here.
 export default async function ListDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) notFound();
 
   const { data: list } = await supabase.from("lists").select("*").eq("slug", slug).single();
   if (!list) notFound();

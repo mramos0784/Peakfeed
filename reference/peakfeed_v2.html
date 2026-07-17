@@ -1,0 +1,2174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#4a1c1b">
+<title>PeakFeed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* ── RESET & TOKENS ── */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{
+  --rust:#5E2524;--rust-deep:#4a1c1b;--rust-mid:#7a3230;
+  --slate:#34495E;--slate-deep:#253545;--slate-mid:#3d566e;
+  --olive:#656B59;--sage:#B3CB84;
+  --mist:#C3D3DE;--mist-light:#dce8f0;--mist-dark:#a8bfcc;
+  --card:#fff;--border:rgba(52,73,94,0.08);
+}
+html,body{height:100%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;overscroll-behavior:none;}
+/* Mobile: fill the full screen, no frame, no black bars */
+@media(max-width:600px){
+  html,body{background:var(--mist-light);}
+  .device{width:100%;max-width:100%;height:100svh;height:100dvh;border-radius:0;border:none;box-shadow:none;}
+}
+/* Desktop/tablet: show as phone mockup on dark background */
+@media(min-width:601px){
+  .device{width:390px;max-width:390px;height:844px;border-radius:40px;border:1.5px solid var(--rust-deep);box-shadow:0 40px 80px rgba(0,0,0,0.5);}
+}
+.device{background:var(--mist-light);display:flex;flex-direction:column;overflow:hidden;position:relative;}
+
+/* ── NOTIFICATION STRIP ── */
+.notif-strip{background:var(--rust-deep);padding:6px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;flex-shrink:0;transition:background 0.15s;}
+.notif-strip:hover{background:var(--rust-mid);}
+.notif-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
+.notif-dot{width:6px;height:6px;border-radius:50%;background:var(--sage);flex-shrink:0;}
+.notif-dot.pulse{animation:pulse 1.4s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
+.notif-text{font-size:10px;color:var(--mist-dark);letter-spacing:0.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.notif-cta{font-size:10px;color:var(--sage);font-weight:500;letter-spacing:0.3px;white-space:nowrap;margin-left:8px;}
+
+/* ── APP HEADER ── */
+.app-header{background:var(--rust);padding:max(44px,env(safe-area-inset-top)) 16px 0;flex-shrink:0;}
+.header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:0;padding-bottom:10px;}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;color:var(--mist);}
+.header-right{display:flex;align-items:center;gap:8px;}
+.avatar-btn{width:30px;height:30px;border-radius:50%;background:var(--rust-mid);border:1px solid var(--rust-mid);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:12px;color:var(--mist);cursor:pointer;}
+
+/* ── SCREEN SYSTEM ── */
+.screens{flex:1;overflow:hidden;position:relative;}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;opacity:0;pointer-events:none;transition:opacity 0.18s;}
+.screen.active{opacity:1;pointer-events:all;}
+
+/* ── ONBOARDING ── */
+.ob-inner{flex:1;overflow-y:auto;display:flex;flex-direction:column;background:var(--mist-light);}
+.ob-hero{background:var(--rust);padding:40px 24px 32px;text-align:center;}
+.ob-logo{font-family:'Bebas Neue',sans-serif;font-size:52px;letter-spacing:6px;color:var(--mist);margin-bottom:4px;}
+.ob-tagline{font-size:12px;color:var(--mist-dark);opacity:0.7;letter-spacing:1px;text-transform:uppercase;}
+.ob-body{padding:24px 20px;flex:1;}
+.ob-title{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;color:var(--rust);margin-bottom:8px;}
+.ob-sub{font-size:13px;color:var(--slate);line-height:1.6;margin-bottom:24px;opacity:0.8;}
+.ob-features{display:flex;flex-direction:column;gap:12px;margin-bottom:28px;}
+.ob-feat{display:flex;align-items:flex-start;gap:10px;background:var(--card);border-radius:8px;padding:12px;border:0.5px solid var(--border);}
+.ob-feat-icon{width:32px;height:32px;border-radius:6px;background:rgba(94,37,36,0.08);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--rust);flex-shrink:0;}
+.ob-feat-text{flex:1;}
+.ob-feat-title{font-size:12px;font-weight:500;color:var(--slate);margin-bottom:2px;}
+.ob-feat-sub{font-size:11px;color:var(--slate);opacity:0.5;line-height:1.4;}
+.ob-form{background:var(--card);border-radius:10px;padding:16px;border:0.5px solid var(--border);margin-bottom:16px;}
+.ob-form-label{font-size:9px;letter-spacing:1.5px;color:var(--slate);text-transform:uppercase;opacity:0.5;margin-bottom:10px;}
+.ob-input{width:100%;border:0.5px solid rgba(52,73,94,0.2);border-radius:6px;padding:9px 12px;font-size:12px;color:var(--slate);background:#fff;font-family:'DM Sans',sans-serif;margin-bottom:8px;outline:none;transition:border-color 0.15s;}
+.ob-input:focus{border-color:var(--rust);}
+.ob-city-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+.ob-city-btn{padding:8px;border:0.5px solid rgba(52,73,94,0.2);border-radius:6px;font-size:11px;color:var(--slate);background:#fff;cursor:pointer;text-align:center;transition:all 0.15s;}
+.ob-city-btn.sel{border-color:var(--rust);color:var(--rust);background:rgba(94,37,36,0.06);}
+.btn-primary{background:var(--rust);border:none;border-radius:8px;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--mist);cursor:pointer;width:100%;transition:opacity 0.15s;}
+.btn-primary:hover{opacity:0.9;}
+.ob-skip{text-align:center;margin-top:10px;font-size:11px;color:var(--slate);opacity:0.4;cursor:pointer;padding:4px;}
+.ob-skip:hover{opacity:0.7;}
+.ob-legal{font-size:10px;color:var(--slate);opacity:0.35;text-align:center;line-height:1.5;margin-top:12px;padding-bottom:20px;}
+
+/* ── MAP SCREEN ── */
+.map-wrap{flex:1;position:relative;overflow:hidden;background:var(--slate);}
+#leaflet-map{width:100%;height:100%;background:var(--slate);}
+.leaflet-container{font-family:'DM Sans',sans-serif;background:var(--slate-deep)!important;}
+.pf-marker{width:14px;height:14px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.85);box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;transition:transform 0.15s;}
+.pf-marker:hover{transform:scale(1.4);}
+.leaflet-popup-content-wrapper{background:rgba(26,26,26,0.9);border:none;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.3);}
+.leaflet-popup-content{color:#fff;font-size:11px;line-height:1.5;margin:8px 10px;}
+.leaflet-popup-tip{background:rgba(26,26,26,0.9);}
+.leaflet-popup-close-button{color:rgba(255,255,255,0.5)!important;}
+.pf-popup-rank{font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--sage);margin-right:5px;}
+.leaflet-control-zoom{border:none!important;}
+.leaflet-control-zoom a{background:rgba(26,26,26,0.85)!important;color:var(--mist)!important;border:0.5px solid rgba(195,211,222,0.2)!important;width:28px!important;height:28px!important;line-height:28px!important;font-size:16px!important;}
+.leaflet-control-attribution{background:rgba(26,26,26,0.6)!important;color:rgba(195,211,222,0.35)!important;font-size:8px!important;}
+.leaflet-control-attribution a{color:rgba(195,211,222,0.5)!important;}
+/* Leaflet handles map markers */
+.map-open-btn{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:1001;background:var(--rust);color:var(--mist);border:none;border-radius:20px;padding:8px 20px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;cursor:pointer;box-shadow:0 2px 12px rgba(94,37,36,0.4);transition:all 0.15s;white-space:nowrap;}
+.map-open-btn:hover{background:var(--rust-mid);}
+
+/* MAP LIST PANEL */
+.map-panel{flex-shrink:0;height:0;overflow:hidden;background:var(--mist-light);border-radius:16px 16px 0 0;border-top:0 solid var(--mist-dark);transition:height 0.3s cubic-bezier(0.4,0,0.2,1),border-top-width 0.1s;display:flex;flex-direction:column;}
+.map-panel.open{height:55%;border-top-width:1px;}
+.panel-handle-row{padding:8px 0 4px;display:flex;align-items:center;justify-content:center;position:relative;}
+.panel-handle{width:32px;height:3px;background:var(--mist-dark);border-radius:2px;}
+.panel-head{padding:4px 12px 8px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px;}
+.panel-select{flex:1;font-size:12px;border:0.5px solid var(--mist-dark);border-radius:6px;padding:5px 8px;background:var(--card);color:var(--slate);font-family:'DM Sans',sans-serif;}
+.panel-edit-btn{width:28px;height:28px;border:0.5px solid var(--mist-dark);border-radius:6px;background:var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--rust);font-size:13px;flex-shrink:0;}
+.panel-list{overflow-y:auto;flex:1;}
+.panel-row{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:0.5px solid var(--border);cursor:pointer;transition:background 0.1s;}
+.panel-row:hover{background:rgba(52,73,94,0.04);}
+.panel-row.has-dot{border-left:2px solid var(--rust);}
+.p-rank{font-family:'Bebas Neue',sans-serif;font-size:16px;min-width:20px;text-align:center;color:rgba(52,73,94,0.18);}
+.p-rank.t{color:var(--rust);}
+.p-info{flex:1;min-width:0;}
+.p-name{font-size:11px;font-weight:500;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.p-sub{font-size:9px;color:var(--slate);opacity:0.4;margin-top:1px;}
+.p-bar-bg{width:40px;height:3px;background:rgba(52,73,94,0.1);border-radius:2px;overflow:hidden;}
+.p-bar{height:100%;background:var(--rust);border-radius:2px;}
+.panel-close-btn{position:absolute;top:8px;right:12px;background:none;border:none;font-size:18px;color:var(--slate);opacity:0.3;cursor:pointer;padding:4px;}
+
+/* ACTION SHEET */
+.action-sheet-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.4);display:none;z-index:20;align-items:flex-end;}
+.action-sheet-overlay.open{display:flex;}
+.action-sheet{background:var(--mist-light);border-radius:16px 16px 0 0;border-top:0.5px solid var(--mist-dark);padding:10px 16px 20px;width:100%;}
+.as-handle{width:32px;height:3px;background:var(--mist-dark);border-radius:2px;margin:0 auto 10px;}
+.as-title{font-size:13px;font-weight:500;color:var(--slate);margin-bottom:2px;}
+.as-sub{font-size:10px;color:var(--slate);opacity:0.45;margin-bottom:12px;}
+.as-btn{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--slate);background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;transition:color 0.1s;}
+.as-btn:last-child{border-bottom:none;}
+.as-btn:hover{color:var(--rust);}
+.as-btn i{font-size:16px;color:var(--mist-dark);}
+.as-btn.primary{color:var(--rust);}
+.as-btn.primary i{color:var(--rust);}
+
+/* ── LISTS SCREEN ── */
+.lists-header{background:var(--rust);padding:max(44px,env(safe-area-inset-top)) 14px 8px;flex-shrink:0;}
+.lh-row1{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.lh-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
+.list-title-text{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--mist);white-space:nowrap;}
+.sub-badge{font-size:9px;background:#4A7C59;color:#fff;padding:2px 7px;border-radius:8px;white-space:nowrap;}
+.lh-city{font-size:10px;color:var(--mist-dark);opacity:0.55;white-space:nowrap;}
+.lh-search-btn{width:28px;height:28px;border:0.5px solid rgba(195,211,222,0.25);border-radius:6px;background:var(--rust-deep);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--mist-dark);flex-shrink:0;}
+.lh-search-open{display:none;align-items:center;gap:8px;margin-bottom:6px;}
+.lh-search-open.show{display:flex;}
+.lh-search-input{flex:1;border:0.5px solid rgba(195,211,222,0.4);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--mist);background:var(--rust-deep);outline:none;font-family:'DM Sans',sans-serif;}
+.lh-search-input::placeholder{color:var(--mist-dark);opacity:0.5;}
+.lh-cancel{font-size:11px;color:var(--mist-dark);cursor:pointer;white-space:nowrap;}
+.lh-dropdown{background:var(--rust-deep);border:0.5px solid rgba(195,211,222,0.15);border-radius:8px;overflow:hidden;margin-bottom:2px;}
+.lh-opt-group{font-size:9px;font-weight:500;color:var(--mist-dark);opacity:0.45;text-transform:uppercase;letter-spacing:0.5px;padding:5px 10px 2px;background:var(--rust);}
+.lh-opt{padding:8px 10px;font-size:11px;color:var(--mist-dark);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background 0.1s;}
+.lh-opt:hover,.lh-opt.sel{background:rgba(195,211,222,0.08);color:var(--mist);}
+.lh-opt.sel{color:var(--sage);}
+.lh-opt-ct{font-size:9px;opacity:0.4;}
+.vote-bar-strip{background:rgba(94,37,36,0.35);border-radius:6px;padding:5px 10px;display:flex;align-items:center;justify-content:space-between;}
+.vbs-label{font-size:10px;color:var(--mist-dark);font-weight:500;}
+.vbs-time{font-size:10px;color:var(--mist-dark);opacity:0.55;}
+.vbs-locked{color:var(--mist-dark);opacity:0.4;}
+.lists-body{flex:1;overflow-y:auto;}
+.ls-section-hd{padding:7px 14px 4px;display:flex;align-items:center;justify-content:space-between;background:var(--mist-light);border-bottom:0.5px solid var(--border);position:sticky;top:0;z-index:2;}
+.ls-sec-label{font-size:9px;letter-spacing:1.5px;color:var(--slate);text-transform:uppercase;opacity:0.45;}
+.ls-sec-sub{font-size:9px;color:var(--slate);opacity:0.3;}
+.locked-notice{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#f8f7f7;border-bottom:0.5px solid var(--border);font-size:10px;color:var(--slate);opacity:0.6;}
+.top-item{display:flex;align-items:center;padding:0 6px;border-bottom:0.5px solid var(--border);min-height:42px;background:var(--card);transition:background 0.1s;cursor:pointer;}
+.top-item.empty{background:var(--mist-light);cursor:default;}.top-item:not(.empty):hover{background:rgba(94,37,36,0.03);}
+.top-item.sortable-ghost{background:rgba(94,37,36,0.05);opacity:0.5;}
+.ti-grip{color:rgba(52,73,94,0.18);font-size:14px;cursor:grab;padding:0 4px;flex-shrink:0;}
+.ti-grip.locked{cursor:default;opacity:0.2;}
+.ti-num{font-family:'Bebas Neue',sans-serif;font-size:16px;min-width:20px;text-align:center;color:rgba(52,73,94,0.18);flex-shrink:0;}
+.ti-num.t{color:var(--rust);}
+.ti-info{flex:1;padding:8px 6px;min-width:0;}
+.ti-name{font-size:11px;font-weight:500;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ti-sub{font-size:9px;color:var(--slate);opacity:0.4;margin-top:1px;}
+.empty-slot{font-size:10px;color:rgba(52,73,94,0.25);padding:0 6px;}
+.ti-moves{display:flex;align-items:center;gap:0;flex-shrink:0;}
+.mv-btn{background:none;border:none;font-size:12px;color:rgba(52,73,94,0.2);cursor:pointer;padding:3px 2px;line-height:1;transition:color 0.1s;}
+.mv-btn:hover{color:var(--rust);}
+.rm-btn{background:none;border:none;font-size:11px;color:rgba(52,73,94,0.18);cursor:pointer;padding:3px 6px;transition:color 0.1s;}
+.rm-btn:hover{color:var(--rust);}
+.queue-item{display:flex;align-items:center;padding:0 6px;border-bottom:0.5px solid var(--border);min-height:40px;background:var(--card);cursor:default;}
+.queue-item.sortable-ghost{background:rgba(94,37,36,0.05);opacity:0.5;}
+.q-grip{color:rgba(52,73,94,0.15);font-size:14px;cursor:grab;padding:0 4px;flex-shrink:0;}
+.q-info{flex:1;padding:6px 6px;min-width:0;}
+.q-name{font-size:11px;font-weight:500;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.q-sub{font-size:9px;color:var(--slate);opacity:0.4;margin-top:1px;}
+.promote-btn{font-size:10px;color:var(--rust);font-weight:500;padding:3px 8px;border:0.5px solid rgba(94,37,36,0.3);border-radius:10px;background:none;cursor:pointer;flex-shrink:0;white-space:nowrap;transition:all 0.1s;}
+.promote-btn:hover{background:var(--rust);color:var(--mist);}
+.promote-btn:disabled{border-color:rgba(52,73,94,0.15);color:rgba(52,73,94,0.25);cursor:default;}
+.add-queue-row{padding:10px 12px;}
+.add-queue-btn{width:100%;padding:8px;font-size:11px;color:var(--rust);font-weight:500;background:none;border:0.5px dashed rgba(94,37,36,0.3);border-radius:8px;cursor:pointer;transition:all 0.15s;}
+.add-queue-btn:hover{background:rgba(94,37,36,0.04);}
+
+/* BOTTOM BAR */
+.bottom-bar{border-top:0.5px solid var(--mist-dark);padding:8px 12px max(10px,env(safe-area-inset-bottom));background:var(--card);flex-shrink:0;}
+.post-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.post-label{font-size:11px;color:var(--slate);opacity:0.65;}
+.toggle{width:34px;height:19px;background:rgba(52,73,94,0.18);border-radius:10px;position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;}
+.toggle.on{background:var(--rust);}
+.toggle-k{position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+.toggle.on .toggle-k{left:17px;}
+.toggle.disabled{opacity:0.35;cursor:default;}
+.action-row{display:flex;gap:6px;}
+.btn-save{flex:1;padding:9px;border:0.5px solid rgba(52,73,94,0.2);border-radius:8px;font-size:11px;font-weight:500;color:var(--slate);background:none;cursor:pointer;transition:all 0.15s;}
+.btn-save:hover{background:rgba(52,73,94,0.05);}
+.btn-submit{flex:2;padding:9px;background:var(--rust);border:none;border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;color:var(--mist);cursor:pointer;transition:all 0.15s;}
+.btn-submit.submitted{background:#4A7C59;}
+.btn-submit:disabled{background:rgba(52,73,94,0.2);color:var(--mist-dark);cursor:default;}
+
+/* ── VOTE DAY DASHBOARD ── */
+.vd-header-live{background:var(--rust);padding:44px 16px 10px;flex-shrink:0;}
+.vd-header-results{background:var(--slate);padding:max(44px,env(safe-area-inset-top)) 16px 10px;flex-shrink:0;}
+.vd-eyebrow{font-size:8px;letter-spacing:2px;color:var(--mist-dark);text-transform:uppercase;opacity:0.6;margin-bottom:3px;}
+.vd-title-row{display:flex;align-items:center;gap:8px;margin-bottom:3px;}
+.vd-title{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--mist);}
+.live-badge{display:flex;align-items:center;gap:4px;background:var(--rust-deep);border-radius:10px;padding:3px 8px;}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--sage);animation:pulse 1.4s infinite;}
+.live-text{font-size:9px;color:var(--mist-dark);letter-spacing:0.8px;}
+.vd-sub{font-size:10px;color:var(--mist-dark);opacity:0.55;display:flex;justify-content:space-between;}
+.vd-progress{background:var(--mist-light);padding:10px 14px;border-bottom:0.5px solid var(--border);flex-shrink:0;}
+.vd-prog-row{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:5px;}
+.vd-pct{font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--rust);letter-spacing:1px;line-height:1;}
+.vd-prog-label{font-size:10px;color:var(--slate);opacity:0.5;margin-top:2px;}
+.vd-next{text-align:right;}
+.vd-next-label{font-size:10px;color:var(--rust);font-weight:500;}
+.vd-next-ct{font-size:9px;color:var(--slate);opacity:0.4;margin-top:2px;}
+.vd-bar-bg{height:4px;background:rgba(52,73,94,0.1);border-radius:2px;overflow:hidden;margin-bottom:4px;}
+.vd-bar{height:100%;background:var(--rust);border-radius:2px;transition:width 1s ease;}
+.vd-bar-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--slate);opacity:0.35;}
+.vd-stats{display:flex;background:var(--mist-light);border-bottom:0.5px solid var(--border);flex-shrink:0;}
+.vd-stat{flex:1;padding:8px 6px;text-align:center;border-right:0.5px solid var(--border);}
+.vd-stat:last-child{border-right:none;}
+.vd-stat-num{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--rust);letter-spacing:0.5px;}
+.vd-stat-lbl{font-size:8px;color:var(--slate);opacity:0.4;text-transform:uppercase;letter-spacing:0.5px;margin-top:1px;}
+.vd-sel-row{background:var(--mist-light);padding:6px 12px;border-bottom:0.5px solid var(--border);display:flex;gap:6px;flex-shrink:0;}
+.vd-sel{flex:1;font-size:11px;border:0.5px solid rgba(52,73,94,0.15);border-radius:5px;padding:4px 7px;background:var(--card);color:var(--slate);font-family:'DM Sans',sans-serif;}
+.vd-rankings{flex:1;overflow-y:auto;}
+.vd-row{display:flex;align-items:center;padding:0 6px 0 12px;border-bottom:0.5px solid var(--border);min-height:40px;background:var(--card);}
+.vd-num{font-family:'Bebas Neue',sans-serif;font-size:18px;min-width:22px;color:rgba(52,73,94,0.15);flex-shrink:0;}
+.vd-num.t{color:var(--rust);}
+.vd-move{font-size:9px;min-width:22px;text-align:center;font-weight:500;flex-shrink:0;}
+.mv-up{color:var(--sage);}
+.mv-dn{color:#c0392b;}
+.mv-st{color:rgba(52,73,94,0.2);}
+.mv-new{color:var(--rust);font-size:8px;letter-spacing:0.3px;}
+.vd-info{flex:1;padding:7px 5px;min-width:0;}
+.vd-name{font-size:11px;font-weight:500;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vd-sub-name{font-size:9px;color:var(--slate);opacity:0.35;margin-top:1px;}
+.vd-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding:6px 8px;flex-shrink:0;min-width:50px;}
+.vd-rbar-bg{width:42px;height:3px;background:rgba(52,73,94,0.08);border-radius:2px;overflow:hidden;}
+.vd-rbar{height:100%;background:var(--rust);border-radius:2px;transition:width 0.8s ease;}
+.vd-pct-txt{font-size:9px;color:var(--rust);font-weight:500;}
+.vd-pts{font-size:9px;color:var(--slate);opacity:0.3;}
+.vd-footer{background:var(--slate-deep);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.vd-footer-txt{font-size:9px;color:var(--mist-dark);opacity:0.45;}
+.vd-share{font-size:10px;color:var(--sage);font-weight:500;cursor:pointer;}
+
+/* ── FEED SCREEN ── */
+.feed-hd{background:var(--rust);padding:max(44px,env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.feed-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--mist);}
+.feed-search-btn{width:28px;height:28px;border-radius:6px;background:var(--rust-deep);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--mist-dark);}
+.feed-filters{background:var(--rust-deep);padding:6px 12px;display:flex;gap:6px;overflow-x:auto;flex-shrink:0;}
+.feed-filters::-webkit-scrollbar{display:none;}
+.ff-chip{padding:3px 10px;border-radius:10px;font-size:9px;letter-spacing:0.3px;color:var(--mist-dark);border:0.5px solid rgba(195,211,222,0.18);white-space:nowrap;cursor:pointer;transition:all 0.15s;}
+.ff-chip.active{background:var(--mist);color:var(--rust);font-weight:500;border-color:var(--mist);}
+.feed-body{flex:1;overflow-y:auto;background:var(--mist-light);}
+.feed-card{background:var(--card);margin:8px 10px;border-radius:10px;overflow:hidden;border:0.5px solid var(--border);cursor:pointer;transition:transform 0.1s,box-shadow 0.1s;}
+.feed-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(52,73,94,0.1);}
+.fc-top{display:flex;align-items:flex-start;gap:8px;padding:10px 10px 6px;}
+.fc-av{width:32px;height:32px;border-radius:50%;background:var(--rust);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:13px;color:var(--mist);flex-shrink:0;}
+.fc-av.slate{background:var(--slate);}
+.fc-av.olive{background:var(--olive);}
+.fc-av.group{background:var(--slate-deep);border:1px solid var(--rust-mid);}
+.fc-meta{flex:1;min-width:0;}
+.fc-name{font-size:11px;font-weight:600;color:var(--slate);}
+.fc-action{font-size:10px;color:var(--slate);opacity:0.55;line-height:1.3;margin-top:1px;}
+.fc-action strong{color:var(--slate);opacity:1;font-weight:500;}
+.fc-time{font-size:9px;color:var(--slate);opacity:0.3;margin-top:2px;}
+.fc-tag{display:inline-block;background:rgba(94,37,36,0.07);border-radius:8px;padding:1px 7px;font-size:9px;color:var(--rust);font-weight:500;margin-top:3px;}
+.fc-submitted{background:var(--rust);padding:6px 10px;display:flex;align-items:center;gap:7px;}
+.fc-sub-icon{font-size:13px;color:var(--sage);}
+.fc-sub-text{font-size:10px;color:var(--mist);font-weight:500;}
+.fc-sub-city{font-size:9px;color:var(--mist-dark);}
+.fc-preview{background:var(--mist-light);border-top:0.5px solid var(--border);padding:7px 10px 8px;}
+.fp-row{display:flex;align-items:center;gap:7px;padding:3px 0;}
+.fp-num{font-family:'Bebas Neue',sans-serif;font-size:13px;color:rgba(52,73,94,0.22);min-width:14px;}
+.fp-num.t{color:var(--rust);}
+.fp-name{font-size:10px;color:var(--slate);font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fp-bar-bg{width:36px;height:2px;background:rgba(52,73,94,0.1);border-radius:1px;overflow:hidden;}
+.fp-bar{height:100%;background:var(--rust);border-radius:1px;}
+.fp-more{font-size:9px;color:var(--slate);opacity:0.35;padding:2px 0 0;letter-spacing:0.2px;}
+.fc-entry{background:var(--mist-light);border-top:0.5px solid var(--border);padding:8px 10px;}
+.fc-entry-inner{background:var(--card);border-radius:6px;border:0.5px solid var(--border);padding:7px 10px;display:flex;align-items:center;gap:8px;}
+.fc-entry-icon{width:28px;height:28px;border-radius:5px;background:var(--rust);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--mist);flex-shrink:0;}
+.fc-entry-info{flex:1;min-width:0;}
+.fc-entry-name{font-size:11px;font-weight:600;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fc-entry-sub{font-size:9px;color:var(--slate);opacity:0.4;}
+.fc-entry-rank{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--rust);}
+.fc-caption{font-size:10px;color:var(--slate);opacity:0.55;padding:4px 10px 10px;line-height:1.5;font-style:italic;}
+.fc-campaign{background:var(--mist-light);border-top:0.5px solid var(--border);padding:8px 10px;}
+.fc-camp-label{font-size:8px;color:var(--slate);opacity:0.4;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:5px;}
+.fc-camp-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.fc-camp-name{font-size:10px;color:var(--slate);font-weight:500;min-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fc-camp-bar-bg{flex:1;height:3px;background:rgba(52,73,94,0.1);border-radius:2px;overflow:hidden;}
+.fc-camp-bar{height:100%;background:var(--rust);border-radius:2px;}
+.fc-camp-pct{font-size:9px;color:var(--rust);font-weight:500;min-width:24px;text-align:right;}
+.fc-group-result{background:var(--slate);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;}
+.fc-gr-label{font-size:8px;color:var(--mist-dark);opacity:0.55;text-transform:uppercase;letter-spacing:0.5px;}
+.fc-gr-winner{font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--mist);letter-spacing:1px;}
+.fc-gr-runner{font-size:10px;color:var(--mist-dark);opacity:0.6;}
+.feed-end{padding:16px;text-align:center;font-size:10px;color:var(--slate);opacity:0.3;}
+
+/* ── PROFILE SCREEN ── */
+.profile-hd{background:var(--rust);padding:max(44px,env(safe-area-inset-top)) 20px 16px;flex-shrink:0;}
+.prof-av-row{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+.prof-av{width:52px;height:52px;border-radius:50%;background:var(--rust-mid);border:1.5px solid var(--rust-mid);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--mist);}
+.prof-name{font-size:16px;font-weight:500;color:var(--mist);}
+.prof-handle{font-size:11px;color:var(--mist-dark);opacity:0.55;margin-top:2px;}
+.prof-stats{display:flex;gap:20px;}
+.ps{text-align:center;}
+.ps-num{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--mist);}
+.ps-lbl{font-size:8px;color:var(--mist-dark);opacity:0.5;text-transform:uppercase;letter-spacing:0.5px;}
+.profile-body{flex:1;overflow-y:auto;background:var(--mist-light);}
+.prof-section{border-bottom:0.5px solid var(--border);overflow:hidden;}
+.prof-section-hd{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:var(--card);}
+.prof-section-title{font-size:10px;letter-spacing:1px;color:var(--slate);text-transform:uppercase;opacity:0.5;font-weight:500;}
+.prof-section-icon{font-size:12px;color:var(--slate);opacity:0.3;}
+.prof-section-body{padding:8px 16px 12px;background:var(--mist-light);border-top:0.5px solid var(--border);}
+.notif-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--border);}
+.notif-row:last-child{border-bottom:none;}
+.notif-info{flex:1;}
+.notif-label{font-size:11px;color:var(--slate);font-weight:500;line-height:1.3;}
+.notif-sub{font-size:9px;color:var(--slate);opacity:0.4;line-height:1.4;margin-top:2px;}
+.notif-tag{font-size:8px;background:rgba(94,37,36,0.08);color:var(--rust);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:3px;}
+.share-card{background:var(--slate);border-radius:8px;padding:14px;margin:0 16px 12px;}
+.sc-ey{font-size:8px;letter-spacing:2px;color:var(--mist-dark);text-transform:uppercase;opacity:0.55;margin-bottom:4px;}
+.sc-hl{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--mist);margin-bottom:10px;}
+.sc-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.sc-n{font-family:'Bebas Neue',sans-serif;font-size:13px;min-width:16px;color:rgba(195,211,222,0.3);}
+.sc-n.t{color:var(--sage);}
+.sc-nm{font-size:11px;color:var(--mist-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sc-foot{font-size:8px;color:rgba(195,211,222,0.25);letter-spacing:1px;border-top:0.5px solid rgba(195,211,222,0.08);padding-top:8px;margin-top:8px;display:flex;justify-content:space-between;}
+.share-btns{display:flex;gap:8px;padding:0 16px 14px;}
+.share-btn{flex:1;background:rgba(52,73,94,0.06);border:0.5px solid rgba(52,73,94,0.12);border-radius:8px;padding:9px 6px;font-size:11px;color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all 0.15s;}
+.share-btn:hover{border-color:var(--rust);color:var(--rust);}
+.share-btn i{font-size:14px;}
+
+/* ── CONFIRM SCREEN ── */
+.confirm-inner{flex:1;overflow-y:auto;padding:28px 20px;background:var(--mist-light);display:flex;flex-direction:column;align-items:center;}
+.ci-icon{font-size:52px;color:var(--rust);margin-bottom:12px;}
+.ci-hl{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:1px;color:var(--rust);margin-bottom:6px;}
+.ci-sub{font-size:12px;color:var(--slate);text-align:center;line-height:1.6;opacity:0.65;margin-bottom:20px;max-width:220px;}
+.ci-stats{display:flex;gap:8px;width:100%;margin-bottom:16px;}
+.cstat{flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:10px;text-align:center;}
+.cstat-n{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--rust);}
+.cstat-l{font-size:9px;color:var(--slate);opacity:0.4;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;}
+.ci-note{background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:12px 14px;font-size:11px;color:var(--slate);line-height:1.6;width:100%;margin-bottom:16px;}
+.ci-note strong{color:var(--rust);font-weight:500;}
+
+/* ── NAV BAR ── */
+.navbar{background:var(--rust-deep);border-top:0.5px solid var(--rust-mid);padding:8px 16px max(20px,env(safe-area-inset-bottom));display:flex;justify-content:space-around;flex-shrink:0;}
+.nav-btn{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;opacity:0.45;transition:opacity 0.15s;background:none;border:none;padding:0;position:relative;}
+.nav-btn.active{opacity:1;}
+.nav-btn i{font-size:20px;color:var(--mist);}
+.nav-btn span{font-size:8px;color:var(--mist-dark);letter-spacing:0.5px;text-transform:uppercase;}
+.nav-badge{position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--sage);border:1.5px solid var(--rust-deep);}
+
+/* ── BANNER AD ── */
+.banner-ad-slot{background:var(--card);border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);padding:6px 10px;flex-shrink:0;position:relative;}
+.banner-ad-label{font-size:8px;color:rgba(52,73,94,0.25);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:3px;}
+.banner-ad-inner{background:rgba(52,73,94,0.03);border:0.5px dashed rgba(52,73,94,0.12);border-radius:4px;height:50px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.banner-ad-placeholder{font-size:10px;color:rgba(52,73,94,0.2);letter-spacing:0.5px;text-transform:uppercase;}
+.banner-ad-dismiss{position:absolute;top:5px;right:8px;font-size:10px;color:rgba(52,73,94,0.2);cursor:pointer;padding:2px;}
+
+/* ── CREATE LIST SCREEN ── */
+.create-header{background:var(--rust);padding:max(44px,env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.create-back-btn{width:32px;height:32px;background:var(--rust-deep);border:none;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--mist);cursor:pointer;font-size:16px;flex-shrink:0;}
+.create-header-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--mist);flex:1;text-align:center;}
+.create-body{flex:1;overflow-y:auto;background:var(--mist-light);}
+.create-section{background:var(--card);border-bottom:0.5px solid var(--border);padding:14px 14px;}
+.create-label{font-size:9px;letter-spacing:1.2px;color:var(--slate);text-transform:uppercase;opacity:0.45;font-weight:500;margin-bottom:8px;}
+.create-sublabel{font-size:11px;color:var(--slate);opacity:0.4;line-height:1.5;margin-bottom:10px;}
+.create-input{width:100%;border:0.5px solid rgba(52,73,94,0.2);border-radius:6px;padding:10px 12px;font-size:13px;color:var(--slate);background:#fff;font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.15s;}
+.create-input:focus{border-color:var(--rust);}
+.create-type-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.create-type-tab{border:1px solid rgba(52,73,94,0.12);border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer;transition:all 0.15s;background:#fff;}
+.create-type-tab.active{border-color:var(--rust);background:rgba(94,37,36,0.04);}
+.create-type-tab i{font-size:22px;color:rgba(52,73,94,0.25);display:block;margin-bottom:5px;}
+.create-type-tab.active i{color:var(--rust);}
+.create-type-tab span{font-size:12px;font-weight:500;color:var(--slate);display:block;margin-bottom:2px;}
+.create-type-sub{font-size:10px;color:var(--slate);opacity:0.35;}
+.create-cadence-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.create-cadence-opt{border:0.5px solid rgba(52,73,94,0.12);border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#fff;transition:all 0.15s;}
+.create-cadence-opt.sel{border-color:var(--rust);background:rgba(94,37,36,0.04);}
+.cco-label{font-size:12px;font-weight:500;color:var(--slate);margin-bottom:2px;}
+.cco-sub{font-size:10px;color:var(--slate);opacity:0.35;}
+.create-field-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.create-field-num{width:18px;font-family:'Bebas Neue',sans-serif;font-size:15px;color:rgba(52,73,94,0.25);flex-shrink:0;text-align:center;}
+.create-field-input{flex:1;border:0.5px solid rgba(52,73,94,0.15);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--slate);background:#fff;font-family:'DM Sans',sans-serif;outline:none;}
+.create-field-input:focus{border-color:var(--rust);}
+.create-add-field-btn{background:none;border:0.5px dashed rgba(52,73,94,0.18);border-radius:6px;padding:7px;font-size:11px;color:var(--slate);opacity:0.45;cursor:pointer;width:100%;margin-top:2px;transition:opacity 0.15s;}
+.create-add-field-btn:hover{opacity:0.8;}
+.create-invite-box{background:rgba(52,73,94,0.04);border:0.5px solid rgba(52,73,94,0.1);border-radius:8px;padding:12px;display:flex;align-items:center;gap:8px;}
+.create-invite-link{flex:1;font-size:11px;color:var(--slate);opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.create-copy-btn{background:var(--rust);border:none;border-radius:6px;padding:6px 10px;font-size:10px;color:var(--mist);cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+.create-bottom{background:var(--card);border-top:0.5px solid var(--border);padding:10px 14px 14px;flex-shrink:0;}
+.group-badge{display:inline-block;background:rgba(52,73,94,0.1);color:var(--slate);font-size:9px;padding:1px 6px;border-radius:4px;margin-left:4px;opacity:0.6;}
+
+/* ── TOAST ── */
+.toast{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:var(--rust);color:var(--mist);border-radius:20px;padding:7px 16px;font-size:11px;font-weight:500;display:none;z-index:50;white-space:nowrap;pointer-events:none;box-shadow:0 4px 16px rgba(94,37,36,0.3);}
+</style>
+</head>
+<body>
+<div class="device" id="app">
+
+  <!-- NOTIFICATION STRIP -->
+  <div class="notif-strip" id="notifStrip" onclick="goTo('voteday')">
+    <div class="notif-left">
+      <div class="notif-dot pulse" id="notifDot"></div>
+      <span class="notif-text" id="notifText">VOTE DAY · SONGS · TAMPA · 62% COUNTED</span>
+    </div>
+    <span class="notif-cta" id="notifCta">LIVE ↗</span>
+  </div>
+
+  <!-- APP HEADER -->
+  <div class="app-header" id="appHeader">
+    <div class="header-row">
+      <div class="logo">PEAKFEED</div>
+      <div class="header-right">
+        <div class="avatar-btn" onclick="goTo('profile')" id="headerAvatar">MR</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREENS -->
+  <div class="screens">
+
+    <!-- ONBOARDING -->
+    <div id="screen-onboard" class="screen active">
+      <div class="ob-inner">
+        <div class="ob-hero">
+          <div class="ob-logo">PEAKFEED</div>
+          <div class="ob-tagline">The people decide what peaks</div>
+        </div>
+        <div class="ob-body">
+          <div class="ob-title">Your city. Your voice. Every week.</div>
+          <div class="ob-sub">Rank the best of what you find: songs, restaurants, venues, events, and issues that matter. Tampa votes together. The community decides what's peak.</div>
+          <div class="ob-features">
+            <div class="ob-feat">
+              <div class="ob-feat-icon"><i class="ti ti-map-2"></i></div>
+              <div class="ob-feat-text">
+                <div class="ob-feat-title">Discover your city's rankings</div>
+                <div class="ob-feat-sub">A live map shows what Tampa ranks highest right now.</div>
+              </div>
+            </div>
+            <div class="ob-feat">
+              <div class="ob-feat-icon"><i class="ti ti-list-numbers"></i></div>
+              <div class="ob-feat-text">
+                <div class="ob-feat-title">Build your top ten</div>
+                <div class="ob-feat-sub">Share anything from any app. Curate your list. Submit your vote.</div>
+              </div>
+            </div>
+            <div class="ob-feat">
+              <div class="ob-feat-icon"><i class="ti ti-chart-bar"></i></div>
+              <div class="ob-feat-text">
+                <div class="ob-feat-title">Vote night, every week</div>
+                <div class="ob-feat-sub">Live results from 6pm Sunday. Watch rankings shift in real time.</div>
+              </div>
+            </div>
+          </div>
+          <form name="early-access" data-netlify="true" netlify-honeypot="bot-field" onsubmit="handleSignup(event)">
+            <input type="hidden" name="form-name" value="early-access">
+            <input type="hidden" name="bot-field">
+            <div class="ob-form">
+              <div class="ob-form-label">Get early access</div>
+              <input class="ob-input" type="text" name="name" id="ob-name" placeholder="Your name" required>
+              <input class="ob-input" type="email" name="email" id="ob-email" placeholder="Email address" required>
+              <input type="hidden" name="city" id="ob-city-hidden" value="Tampa">
+              <div style="font-size:10px;color:var(--slate);opacity:0.45;margin-bottom:8px;">Your city</div>
+              <div class="ob-city-row" id="cityRow">
+                <div class="ob-city-btn sel" onclick="selectCity(this,'Tampa')">Tampa</div>
+                <div class="ob-city-btn" onclick="selectCity(this,'St. Pete')">St. Pete</div>
+                <div class="ob-city-btn" onclick="selectCity(this,'Clearwater')">Clearwater</div>
+                <div class="ob-city-btn" onclick="selectCity(this,'Other')">Other</div>
+              </div>
+            </div>
+            <button class="btn-primary" type="submit">Join the waitlist</button>
+          </form>
+          <div class="ob-skip" onclick="skipOnboard()">Skip for now — explore the prototype</div>
+          <div id="obBackBtn" style="display:none;text-align:center;margin-top:4px;font-size:11px;color:var(--rust);cursor:pointer;padding:4px;" onclick="goTo('profile')">← Back to app</div>
+          <div class="ob-legal">By joining you agree to receive updates about PeakFeed. No spam. No selling your data. Unsubscribe anytime.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP / EXPLORE -->
+    <div id="screen-map" class="screen" style="flex-direction:column;">
+      <div class="map-wrap" id="mapWrap">
+        <div id="leaflet-map"></div>
+        <button class="map-open-btn" id="mapOpenBtn" onclick="togglePanel()">Rankings ↑</button>
+      </div>
+
+      <!-- SLIDING LIST PANEL -->
+      <div class="map-panel" id="mapPanel">
+        <div class="panel-handle-row" onclick="togglePanel()" style="padding:10px 0 5px;cursor:pointer;">
+          <div class="panel-handle"></div>
+          <div style="position:absolute;right:12px;top:8px;font-size:13px;color:rgba(52,73,94,0.3);cursor:pointer;" onclick="event.stopPropagation();togglePanel()">✕</div>
+        </div>
+        <div class="panel-head">
+          <select class="panel-select" id="panelSelect" onchange="switchPanelList(this.value)">
+            <optgroup label="MY LISTS">
+              <option value="Songs">Songs</option>
+              <option value="Restaurants">Restaurants</option>
+              <option value="Venues">Venues</option>
+              <option value="Events">Events</option>
+              <option value="Issues">Issues</option>
+            </optgroup>
+            <optgroup label="SUGGESTED">
+              <option value="Films">Films · 312 active</option>
+              <option value="Books">Books · 198 active</option>
+            </optgroup>
+          </select>
+          <div class="panel-edit-btn" onclick="goToLists()" title="Edit this list"><i class="ti ti-edit"></i></div>
+        </div>
+        <div class="panel-list" id="panelList"></div>
+      </div>
+
+    </div>
+
+    <!-- LISTS SCREEN -->
+    <div id="screen-lists" class="screen" style="flex-direction:column;">
+      <div class="lists-header">
+        <!-- Normal header row -->
+        <div class="lh-row1" id="lhNormal">
+          <div class="lh-search-btn" onclick="toggleListSearch()" title="Switch list" style="margin-right:8px;flex-shrink:0;"><i class="ti ti-menu-2"></i></div>
+          <div class="lh-left">
+            <span class="list-title-text" id="listTitleText">Songs</span>
+            <span class="sub-badge" id="listSubBadge" style="display:none;">submitted</span>
+          </div>
+          <span class="lh-city">Tampa, FL</span>
+        </div>
+        <!-- Search/dropdown row -->
+        <div class="lh-search-open" id="lhSearch">
+          <input class="lh-search-input" type="text" placeholder="Search lists…" id="listSearchInput" oninput="filterListSearch(this.value)">
+          <span class="lh-cancel" onclick="closeListSearch()">Done</span>
+        </div>
+        <div class="lh-dropdown" id="listDropdown" style="display:none;">
+          <div class="lh-opt-group">My Lists</div>
+          <div class="lh-opt sel" id="lopt-Songs" onclick="switchList('Songs')">Songs <span class="lh-opt-ct">1,204 voters</span></div>
+          <div class="lh-opt" id="lopt-Restaurants" onclick="switchList('Restaurants')">Restaurants <span class="lh-opt-ct">847 voters</span></div>
+          <div class="lh-opt" id="lopt-Venues" onclick="switchList('Venues')">Venues <span class="lh-opt-ct">634 voters</span></div>
+          <div class="lh-opt" id="lopt-Events" onclick="switchList('Events')">Events <span class="lh-opt-ct">512 voters</span></div>
+          <div class="lh-opt" id="lopt-Issues" onclick="switchList('Issues')">Issues <span class="lh-opt-ct">398 voters</span></div>
+          <div class="lh-opt-group">Suggested</div>
+          <div class="lh-opt" id="lopt-Films" onclick="switchList('Films')">Films <span class="lh-opt-ct">312 active · tap to join</span></div>
+          <div class="lh-opt" id="lopt-Books" onclick="switchList('Books')">Books <span class="lh-opt-ct">198 active · tap to join</span></div>
+          <div class="lh-opt-group">Create</div>
+          <div class="lh-opt" onclick="openCreateList('personal')" style="color:var(--sage);font-weight:500;">＋ New personal list</div>
+          <div class="lh-opt" onclick="openCreateList('group')" style="color:var(--sage);font-weight:500;">＋ New group</div>
+        </div>
+        <div class="vote-bar-strip" id="voteBarStrip">
+          <span class="vbs-label" id="vbsLabel">Vote day</span>
+          <span class="vbs-time" id="vbsTime">Sunday · 3 days away</span>
+        </div>
+      </div>
+
+      <!-- BANNER AD SLOT — 320×50 mobile banner above the list -->
+      <!-- NOTE: Sponsored list items (paid placement within rankings) are noted for future
+           stakeholder review. Decision pending on placement, labeling, and UX impact. -->
+      <div class="banner-ad-slot" id="bannerAd">
+        <div class="banner-ad-label">Advertisement</div>
+        <div class="banner-ad-inner">
+          <i class="ti ti-ad" style="font-size:18px;color:rgba(52,73,94,0.2);"></i>
+          <span class="banner-ad-placeholder">320 × 50 Mobile Banner</span>
+        </div>
+        <span class="banner-ad-dismiss" onclick="document.getElementById('bannerAd').style.display='none'">✕</span>
+      </div>
+
+      <div class="lists-body" id="listsBody">
+        <div class="ls-section-hd">
+          <span class="ls-sec-label">Top Ten · Your Vote</span>
+          <span class="ls-sec-sub" id="topSecSub">drag to reorder</span>
+        </div>
+        <div id="lockedNotice" style="display:none;">
+          <div class="locked-notice"><i class="ti ti-lock" style="font-size:13px;"></i>Rankings locked Fri 8pm – Mon. Add to your queue freely.</div>
+        </div>
+        <div id="topTenZone"></div>
+        <div class="ls-section-hd" style="top:auto;">
+          <span class="ls-sec-label">Queue</span>
+          <span class="ls-sec-sub">most recent · drag to reorder</span>
+        </div>
+        <div id="queueZone"></div>
+      </div>
+
+      <div class="bottom-bar">
+        <div class="post-row">
+          <span class="post-label">Post changes to feed</span>
+          <div class="toggle" id="postToggle" onclick="togglePost()"><div class="toggle-k"></div></div>
+        </div>
+        <div class="action-row">
+          <button class="btn-save" onclick="saveList()">Save</button>
+          <button class="btn-submit" id="submitBtn" onclick="handleSubmit()">Submit to vote</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOTE DAY DASHBOARD -->
+    <div id="screen-voteday" class="screen" style="flex-direction:column;">
+      <div id="vdHeaderLive" class="vd-header-live">
+        <div class="vd-eyebrow">Tampa Bay · Songs</div>
+        <div class="vd-title-row">
+          <div class="vd-title">VOTE NIGHT</div>
+          <div class="live-badge"><div class="live-dot"></div><span class="live-text">LIVE</span></div>
+        </div>
+        <div class="vd-sub"><span id="vdLiveDate">Sunday, June 1</span><span id="vdClock">8:15 PM</span></div>
+      </div>
+      <div id="vdHeaderResults" class="vd-header-results" style="display:none;">
+        <div class="vd-eyebrow">Tampa Bay · Songs</div>
+        <div class="vd-title">FINAL RESULTS</div>
+        <div class="vd-sub"><span id="vdResultsDate">Sunday, June 1 · Final</span><span style="color:var(--sage);">FINAL</span></div>
+      </div>
+
+      <div id="vdProgress" class="vd-progress">
+        <div class="vd-prog-row">
+          <div><div class="vd-pct" id="vdPct">62%</div><div class="vd-prog-label">of votes counted</div></div>
+          <div class="vd-next"><div class="vd-next-label" id="vdNextLabel">Next update: 11:24</div><div class="vd-next-ct" id="vdVoteCount">1,593 of 2,571</div></div>
+        </div>
+        <div class="vd-bar-bg"><div class="vd-bar" id="vdBar" style="width:62%;"></div></div>
+        <div class="vd-bar-labels"><span>6:00 PM start</span><span>Updates every 15 min</span></div>
+      </div>
+      <div id="vdStats" class="vd-stats" style="display:none;">
+        <div class="vd-stat"><div class="vd-stat-num">2,571</div><div class="vd-stat-lbl">voters</div></div>
+        <div class="vd-stat"><div class="vd-stat-num">94%</div><div class="vd-stat-lbl">turnout</div></div>
+        <div class="vd-stat"><div class="vd-stat-num">12</div><div class="vd-stat-lbl">new entries</div></div>
+        <div class="vd-stat"><div class="vd-stat-num">8</div><div class="vd-stat-lbl">cities</div></div>
+      </div>
+
+      <div class="vd-sel-row">
+        <select class="vd-sel" onchange="showToast('Switched list')">
+          <option>Songs</option><option>Restaurants</option><option>Venues</option><option>Issues</option>
+        </select>
+        <select class="vd-sel" onchange="showToast('Switched geography')">
+          <option>Tampa</option><option>Tampa Bay</option><option>Florida</option><option>National</option>
+        </select>
+      </div>
+      <div class="vd-rankings" id="vdRankings"></div>
+      <!-- GROUP RESULTS SECTION -->
+      <div style="background:var(--slate);padding:7px 14px 4px;flex-shrink:0;border-top:0.5px solid var(--slate-mid);">
+        <div style="font-size:9px;letter-spacing:1.2px;color:var(--mist-dark);opacity:0.45;text-transform:uppercase;font-weight:500;">Group Results</div>
+      </div>
+      <div style="background:var(--mist-light);border-top:0.5px solid var(--border);flex-shrink:0;">
+        <div style="display:flex;align-items:center;padding:9px 14px;border-bottom:0.5px solid var(--border);cursor:pointer;" onclick="showToast('Sneaker Heads Tampa · Current Favorites')">
+          <div style="width:28px;height:28px;border-radius:6px;background:var(--slate);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--mist-dark);flex-shrink:0;margin-right:10px;">👥</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;font-weight:500;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Sneaker Heads Tampa</div>
+            <div style="font-size:9px;color:var(--slate);opacity:0.4;margin-top:1px;">Current Favorites · Jordan 4 Military Blue leads</div>
+          </div>
+          <div style="font-size:9px;color:var(--sage);font-weight:500;white-space:nowrap;margin-left:6px;">LIVE</div>
+        </div>
+        <div style="padding:8px 14px;font-size:10px;color:var(--slate);opacity:0.35;text-align:center;">Join or create a group to see their results here</div>
+      </div>
+      <div class="vd-footer">
+        <span class="vd-footer-txt" id="vdFooter">1,593 votes · 2,571 eligible · Tampa</span>
+        <span class="vd-share" onclick="showToast('Results card copied')">Share results ↗</span>
+      </div>
+    </div>
+
+    <!-- FEED SCREEN -->
+    <div id="screen-feed" class="screen" style="flex-direction:column;">
+      <div class="feed-hd">
+        <div class="feed-title">Feed</div>
+        <div class="feed-search-btn" onclick="showToast('Search: find people and lists')"><i class="ti ti-search"></i></div>
+      </div>
+      <div class="feed-filters">
+        <div class="ff-chip active" onclick="setFeedFilter(this)">All</div>
+        <div class="ff-chip" onclick="setFeedFilter(this)">Votes</div>
+        <div class="ff-chip" onclick="setFeedFilter(this)">Lists</div>
+        <div class="ff-chip" onclick="setFeedFilter(this)">New entries</div>
+        <div class="ff-chip" onclick="setFeedFilter(this)">Groups</div>
+      </div>
+      <div class="feed-body" id="feedBody"></div>
+    </div>
+
+    <!-- PROFILE SCREEN -->
+    <div id="screen-profile" class="screen" style="flex-direction:column;">
+      <div class="profile-hd">
+        <div class="prof-av-row">
+          <div class="prof-av" id="profAvatar">MR</div>
+          <div>
+            <div class="prof-name" id="profName">Manuel R.</div>
+            <div class="prof-handle">@manuelr · Tampa, FL</div>
+          </div>
+        </div>
+        <div class="prof-stats">
+          <div class="ps"><div class="ps-num">12</div><div class="ps-lbl">Streak</div></div>
+          <div class="ps"><div class="ps-num">247</div><div class="ps-lbl">Followers</div></div>
+          <div class="ps"><div class="ps-num">89</div><div class="ps-lbl">Following</div></div>
+          <div class="ps"><div class="ps-num">5</div><div class="ps-lbl">Lists</div></div>
+        </div>
+      </div>
+      <div class="profile-body">
+        <!-- Share card -->
+        <div class="share-card">
+          <div class="sc-ey">PeakFeed · Songs · Tampa</div>
+          <div class="sc-hl">My top 10<br>this week</div>
+          <div id="shareCardList"></div>
+          <div class="sc-foot"><span>peakfeed.app</span><span>vote every week</span></div>
+        </div>
+        <div class="share-btns">
+          <button class="share-btn" onclick="showToast('Opening Instagram')"><i class="ti ti-brand-instagram"></i> Story</button>
+          <button class="share-btn" onclick="showToast('Copied to clipboard')"><i class="ti ti-copy"></i> Copy</button>
+          <button class="share-btn" onclick="showToast('Share sheet opened')"><i class="ti ti-share"></i> Share</button>
+        </div>
+
+        <!-- Sections -->
+        <div class="prof-section">
+          <div class="prof-section-hd" onclick="toggleSection('myLists')">
+            <span class="prof-section-title">My Lists</span>
+            <i class="ti ti-chevron-down prof-section-icon" id="myListsIcon"></i>
+          </div>
+          <div id="myListsBody" style="display:none;" class="prof-section-body">
+            <div style="font-size:9px;letter-spacing:1px;color:var(--rust);text-transform:uppercase;opacity:0.6;margin-bottom:8px;font-weight:500;">System lists</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+              <div style="background:rgba(94,37,36,0.08);border:0.5px solid rgba(94,37,36,0.2);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--rust);cursor:pointer;" onclick="switchList('Songs');goTo('lists')">Songs</div>
+              <div style="background:rgba(52,73,94,0.07);border:0.5px solid rgba(52,73,94,0.15);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--slate);cursor:pointer;" onclick="switchList('Restaurants');goTo('lists')">Restaurants</div>
+              <div style="background:rgba(52,73,94,0.07);border:0.5px solid rgba(52,73,94,0.15);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--slate);cursor:pointer;" onclick="switchList('Venues');goTo('lists')">Venues</div>
+              <div style="background:rgba(52,73,94,0.07);border:0.5px solid rgba(52,73,94,0.15);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--slate);cursor:pointer;" onclick="switchList('Events');goTo('lists')">Events</div>
+              <div style="background:rgba(52,73,94,0.07);border:0.5px solid rgba(52,73,94,0.15);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--slate);cursor:pointer;" onclick="switchList('Issues');goTo('lists')">Issues</div>
+            </div>
+            <div style="font-size:9px;letter-spacing:1px;color:var(--rust);text-transform:uppercase;opacity:0.6;margin-bottom:8px;font-weight:500;">Public personal lists</div>
+            <div id="publicPersonalLists" style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:11px;color:var(--slate);opacity:0.35;font-style:italic;">No public lists yet. Create a personal list and make it public to share here.</div>
+            </div>
+            <div style="margin-top:10px;">
+              <div onclick="openCreateList('personal')" style="font-size:11px;color:var(--rust);cursor:pointer;font-weight:500;">＋ Create a personal list</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="prof-section">
+          <div class="prof-section-hd" onclick="toggleSection('following')">
+            <span class="prof-section-title">Following · Favorites</span>
+            <i class="ti ti-chevron-down prof-section-icon" id="followingIcon"></i>
+          </div>
+          <div id="followingBody" style="display:none;" class="prof-section-body">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="showToast('Maria R. · following')">
+                <div style="width:36px;height:36px;border-radius:50%;background:var(--rust);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:13px;color:var(--mist);position:relative;">MR<div style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:var(--sage);border:1.5px solid var(--mist-light);"></div></div>
+                <div style="font-size:9px;color:var(--slate);opacity:0.5;">Maria R.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="showToast('DJ Kool · following')">
+                <div style="width:36px;height:36px;border-radius:50%;background:var(--slate);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:13px;color:var(--mist);">DK</div>
+                <div style="font-size:9px;color:var(--slate);opacity:0.5;">DJ Kool</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="showToast('Sofia L. · following')">
+                <div style="width:36px;height:36px;border-radius:50%;background:var(--olive);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:13px;color:var(--mist);">SL</div>
+                <div style="font-size:9px;color:var(--slate);opacity:0.5;">Sofia L.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;" onclick="showToast('Add more people to follow')">
+                <div style="width:36px;height:36px;border-radius:50%;border:1px dashed rgba(52,73,94,0.25);display:flex;align-items:center;justify-content:center;font-size:16px;color:rgba(52,73,94,0.25);">+</div>
+                <div style="font-size:9px;color:var(--slate);opacity:0.3;">Find more</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="prof-section">
+          <div class="prof-section-hd" onclick="toggleSection('notifications')">
+            <span class="prof-section-title">Notification Settings</span>
+            <i class="ti ti-chevron-down prof-section-icon" id="notificationsIcon"></i>
+          </div>
+          <div id="notificationsBody" style="display:none;" class="prof-section-body" id="notifSettingsBody">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+
+        <div class="prof-section">
+          <div class="prof-section-hd" onclick="toggleSection('account')">
+            <span class="prof-section-title">Account</span>
+            <i class="ti ti-chevron-down prof-section-icon" id="accountIcon"></i>
+          </div>
+          <div id="accountBody" style="display:none;" class="prof-section-body">
+            <div style="font-size:11px;color:var(--slate);line-height:1.8;opacity:0.7;">
+              <div>Tampa, FL · Joined June 2026</div>
+              <div>Location verified ✓</div>
+              <div>Account active · System list votes enabled</div>
+              <div style="margin-top:8px;color:var(--rust);cursor:pointer;" onclick="showToast('Privacy settings')">Privacy settings →</div>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:0.5px solid var(--border);">
+              <div style="font-size:11px;font-weight:500;color:var(--slate);margin-bottom:6px;">Share PeakFeed</div>
+              <button onclick="goTo('onboard')" style="width:100%;padding:9px;background:var(--rust);border:none;border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;color:var(--mist);cursor:pointer;margin-bottom:6px;">Join the waitlist ↗</button>
+              <div style="font-size:10px;color:var(--slate);opacity:0.4;text-align:center;">Share this page with someone who should be on PeakFeed</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONFIRM SCREEN -->
+    <div id="screen-confirm" class="screen" style="flex-direction:column;">
+      <div class="confirm-inner">
+        <div class="ci-icon"><i class="ti ti-circle-check"></i></div>
+        <div class="ci-hl">Voice heard.</div>
+        <div class="ci-sub" id="confirmSub">Your top 10 is in. Tampa's rankings update Sunday at midnight.</div>
+        <div class="ci-stats">
+          <div class="cstat"><div class="cstat-n">2,571</div><div class="cstat-l">Tampa voters</div></div>
+          <div class="cstat"><div class="cstat-n">12</div><div class="cstat-l">Your streak</div></div>
+          <div class="cstat"><div class="cstat-n">5</div><div class="cstat-l">Lists voted</div></div>
+        </div>
+        <div class="ci-note"><strong id="confirmNote">Your vote is counted.</strong> Rankings publish Sunday at midnight. Come back to see where your picks landed.</div>
+        <button class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="goTo('voteday')">See live results</button>
+        <button style="width:100%;background:transparent;border:0.5px solid rgba(52,73,94,0.2);border-radius:8px;padding:12px;font-size:12px;color:var(--slate);cursor:pointer;" onclick="goTo('map')">Back to map</button>
+      </div>
+    </div>
+
+  </div><!-- /screens -->
+
+  <!-- CREATE LIST SCREEN -->
+  <div id="screen-create-list" class="screen" style="flex-direction:column;">
+    <div class="create-header">
+      <button class="create-back-btn" onclick="closeCreateList()"><i class="ti ti-arrow-left"></i></button>
+      <div class="create-header-title" id="createHeaderTitle">New List</div>
+      <div style="width:32px;"></div>
+    </div>
+    <div class="create-body">
+
+      <!-- Type -->
+      <div class="create-section">
+        <div class="create-label">List type</div>
+        <div class="create-type-tabs">
+          <div class="create-type-tab active" id="typeTabPersonal" onclick="setCreateType('personal')">
+            <i class="ti ti-list"></i><span>Personal List</span><div class="create-type-sub">Only you vote</div>
+          </div>
+          <div class="create-type-tab" id="typeTabGroup" onclick="setCreateType('group')">
+            <i class="ti ti-users"></i><span>Group</span><div class="create-type-sub">Members vote together</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Name -->
+      <div class="create-section">
+        <div class="create-label" id="createNameLabel">List name</div>
+        <input class="create-input" type="text" id="createListName" placeholder="e.g., Sneakers, Dog Parks, Local Murals…" maxlength="40">
+      </div>
+
+      <!-- Vote cadence -->
+      <div class="create-section">
+        <div class="create-label">Vote cadence</div>
+        <div class="create-cadence-grid">
+          <div class="create-cadence-opt sel" data-val="weekly" onclick="selectCadence(this)"><div class="cco-label">Weekly</div><div class="cco-sub">Fast moving</div></div>
+          <div class="create-cadence-opt" data-val="biweekly" onclick="selectCadence(this)"><div class="cco-label">Biweekly</div><div class="cco-sub">Mid pace</div></div>
+          <div class="create-cadence-opt" data-val="monthly" onclick="selectCadence(this)"><div class="cco-label">Monthly</div><div class="cco-sub">Books, films</div></div>
+          <div class="create-cadence-opt" data-val="ondemand" onclick="selectCadence(this)"><div class="cco-label">On demand</div><div class="cco-sub">You call it</div></div>
+        </div>
+      </div>
+
+      <!-- Identifier fields -->
+      <div class="create-section">
+        <div class="create-label">Entry identifier fields</div>
+        <div class="create-sublabel">How members describe each entry. Up to 3 fields. Leave blank to use name only.</div>
+        <div id="identifierFields">
+          <div class="create-field-row">
+            <div class="create-field-num">1</div>
+            <input class="create-field-input" type="text" placeholder="e.g., Brand" id="cfield0" maxlength="24">
+          </div>
+        </div>
+        <button class="create-add-field-btn" id="addFieldBtn" onclick="addIdentifierField()">+ Add another field</button>
+      </div>
+
+      <!-- Group: invite section (hidden by default) -->
+      <div class="create-section" id="groupInviteSection" style="display:none;">
+        <div class="create-label">Invite members</div>
+        <div class="create-invite-box">
+          <span class="create-invite-link">peakfeed.app/group/[invite-link]</span>
+          <button class="create-copy-btn" onclick="showToast('Invite link copied')"><i class="ti ti-copy"></i> Copy</button>
+        </div>
+        <div class="create-sublabel" style="margin-top:8px;">Share this link with anyone you want to join. You can also create the group now and invite later.</div>
+      </div>
+
+      <!-- Group: ballot note (hidden by default) -->
+      <div class="create-section" id="groupBallotNote" style="display:none;">
+        <div class="create-label">How group voting works</div>
+        <div class="create-sublabel">Each member adds entries to a shared ballot. Everyone ranks from that ballot. On vote day, all rankings aggregate into group results. Members can view each other's lists at any time.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+          <div style="background:rgba(94,37,36,0.07);border-radius:6px;padding:5px 10px;font-size:10px;color:var(--rust);">Shared ballot</div>
+          <div style="background:rgba(94,37,36,0.07);border-radius:6px;padding:5px 10px;font-size:10px;color:var(--rust);">Self-moderating</div>
+          <div style="background:rgba(94,37,36,0.07);border-radius:6px;padding:5px 10px;font-size:10px;color:var(--rust);">Group aggregate</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="create-bottom">
+      <button class="btn-primary" onclick="submitCreateList()" id="createSubmitBtn">Create list</button>
+    </div>
+  </div>
+
+  <!-- GROUP HOME SCREEN -->
+  <div id="screen-group-home" class="screen" style="flex-direction:column;">
+    <div class="create-header">
+      <button class="create-back-btn" onclick="goTo('lists')"><i class="ti ti-arrow-left"></i></button>
+      <div class="create-header-title" id="groupHomeName">Group</div>
+      <div style="width:32px;"></div>
+    </div>
+    <!-- Group meta -->
+    <div style="background:var(--rust-deep);padding:10px 16px 12px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <div id="ghMemberAvatars" style="display:flex;gap:-4px;"></div>
+        <span id="ghMemberCount" style="font-size:10px;color:var(--mist-dark);opacity:0.6;"></span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="showToast('Invite link copied')" style="flex:1;background:rgba(195,211,222,0.1);border:0.5px solid rgba(195,211,222,0.2);border-radius:6px;padding:6px;font-size:10px;color:var(--mist-dark);cursor:pointer;"><i class="ti ti-user-plus" style="margin-right:4px;"></i>Invite</button>
+        <button onclick="showToast('Group link copied')" style="flex:1;background:rgba(195,211,222,0.1);border:0.5px solid rgba(195,211,222,0.2);border-radius:6px;padding:6px;font-size:10px;color:var(--mist-dark);cursor:pointer;"><i class="ti ti-share" style="margin-right:4px;"></i>Share group</button>
+      </div>
+    </div>
+    <!-- Lists -->
+    <div style="flex:1;overflow-y:auto;background:var(--mist-light);">
+      <div style="padding:8px 14px 4px;font-size:9px;letter-spacing:1.2px;color:var(--slate);text-transform:uppercase;opacity:0.4;font-weight:500;border-bottom:0.5px solid var(--border);background:var(--mist-light);">Group lists</div>
+      <div id="ghLists"></div>
+      <div style="padding:10px 12px;">
+        <button onclick="openCreateList('group-list')" style="width:100%;padding:9px;background:none;border:0.5px dashed rgba(94,37,36,0.3);border-radius:8px;font-size:11px;color:var(--rust);font-weight:500;cursor:pointer;">＋ New list in this group</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV BAR -->
+  <nav class="navbar" id="navbar" style="display:none;">
+    <button class="nav-btn" id="nav-map" onclick="goTo('map')">
+      <i class="ti ti-map-2"></i><span>Map</span>
+    </button>
+    <button class="nav-btn" id="nav-lists" onclick="goTo('lists')">
+      <i class="ti ti-list-numbers"></i><span>Lists</span>
+      <div class="nav-badge" id="listsBadge" style="display:none;"></div>
+    </button>
+    <button class="nav-btn" id="nav-voteday" onclick="goTo('voteday')">
+      <i class="ti ti-chart-bar"></i><span>Vote Day</span>
+      <div class="nav-badge" id="voteBadge"></div>
+    </button>
+    <button class="nav-btn" id="nav-feed" onclick="goTo('feed')">
+      <i class="ti ti-rss"></i><span>Feed</span>
+    </button>
+    <button class="nav-btn" id="nav-profile" onclick="goTo('profile')">
+      <i class="ti ti-user"></i><span>Profile</span>
+    </button>
+  </nav>
+
+  <!-- DEVICE-LEVEL ACTION SHEET — accessible from all screens -->
+  <div class="action-sheet-overlay" id="actionSheet" onclick="closeSheet()">
+    <div class="action-sheet" onclick="event.stopPropagation()">
+      <div class="as-handle"></div>
+      <div class="as-title" id="asTitle">Entry</div>
+      <div class="as-sub" id="asSub">Tampa rankings</div>
+      <div id="asButtons"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="globalToast"></div>
+</div>
+
+<script>
+/* ═══════════════════════════════
+   DATA
+═══════════════════════════════ */
+const DATA = {
+  Songs: {
+    listType: 'system', hasGeo: false, icon: 'ti-music', color: '#5E2524',
+    action: 'Open in Spotify',
+    entries: [
+      {n:'Noid', s:'Tyler, The Creator · 2023'},
+      {n:'Timeless', s:'The Weeknd · 2024'},
+      {n:'Euphoria', s:'Kendrick Lamar · 2024'},
+      {n:'Not Like Us', s:'Kendrick Lamar · 2024'},
+      {n:'Family Matters', s:'Drake · 2024'},
+      {n:'CARNIVAL', s:'¥$, Ye & Ty Dolla $ign · 2023'},
+      {n:'Luther', s:'Kendrick Lamar · 2024'},
+      {n:'Squabble Up', s:'Kendrick Lamar · 2024'},
+      {n:'Heart Pt. 6', s:'Drake · 2024'},
+      {n:'Man on the Moon III', s:'Kid Cudi · 2020'},
+    ]
+  },
+  Restaurants: {
+    listType: 'system', hasGeo: true, icon: 'ti-tools-kitchen-2', color: '#D85A30',
+    action: 'Open in Google Maps',
+    entries: [
+      {n:'Ulele', s:'Native Cuisine · Tampa Heights', lat:27.9679, lng:-82.4607},
+      {n:'Oxford Exchange', s:'New American · Hyde Park', lat:27.9364, lng:-82.4786},
+      {n:'Mise en Place', s:'Downtown Tampa', lat:27.9470, lng:-82.4590},
+      {n:'Armature Works', s:'Tampa Heights Riverwalk', lat:27.9594, lng:-82.4648},
+      {n:"Bern's Steakhouse", s:'Hyde Park · Tampa', lat:27.9373, lng:-82.4762},
+      {n:"CW's Gin Joint", s:'Ybor City · Tampa', lat:27.9553, lng:-82.4238},
+      {n:'La Segunda Bakery', s:'Ybor City · Tampa', lat:27.9551, lng:-82.4228},
+      {n:'Élevage', s:'Epicurean Hotel · Hyde Park', lat:27.9365, lng:-82.4791},
+      {n:"Rooster & the Till", s:'Seminole Heights', lat:27.9784, lng:-82.4577},
+      {n:"Cena by Mineo's", s:'South Howard · Tampa', lat:27.9364, lng:-82.4791},
+    ]
+  },
+  Venues: {
+    listType: 'system', hasGeo: true, icon: 'ti-building', color: '#34495E',
+    action: 'Open in Google Maps',
+    entries: [
+      {n:'Crowbar', s:'Live Venue · Ybor City', lat:27.9553, lng:-82.4224},
+      {n:'Armature Works', s:'Events Space · Riverwalk', lat:27.9594, lng:-82.4648},
+      {n:'The Orpheum', s:'Concert Hall · Ybor City', lat:27.9547, lng:-82.4240},
+      {n:'Tampa Theatre', s:'Historic Cinema · Downtown', lat:27.9486, lng:-82.4608},
+      {n:'Stageworks Theatre', s:'Performing Arts · Downtown', lat:27.9492, lng:-82.4583},
+      {n:"The Ritz Ybor", s:'Historic Venue · Ybor City', lat:27.9546, lng:-82.4243},
+      {n:"Skipper's Smokehouse", s:'Outdoor Live Music · N. Tampa', lat:28.0031, lng:-82.4598},
+      {n:'The Cuban Club', s:'Historic Ballroom · Ybor City', lat:27.9553, lng:-82.4232},
+      {n:"Straz Center", s:'Performing Arts · Riverwalk', lat:27.9531, lng:-82.4650},
+      {n:'Studio 620', s:'Indie Arts Space · Downtown', lat:27.9494, lng:-82.4592},
+    ]
+  },
+  Events: {
+    listType: 'system', hasGeo: true, icon: 'ti-calendar-event', color: '#656B59',
+    action: 'View event details',
+    entries: [
+      {n:'Gasparilla Music Festival', s:'Feb · Curtis Hixon Park', lat:27.9466, lng:-82.4616},
+      {n:'Local Showcase @ Crowbar', s:'Jun 8 · Ybor City', lat:27.9553, lng:-82.4224},
+      {n:'Ybor City Art Walk', s:'Jun 15 · 7th Ave Ybor', lat:27.9553, lng:-82.4232},
+      {n:'Jazz Brunch @ Ulele', s:'Jun 9 · Tampa Heights', lat:27.9679, lng:-82.4607},
+      {n:'Tampa Bay Food & Wine', s:'Jun 21 · Convention Center', lat:27.9441, lng:-82.4563},
+      {n:'Indie Film Night @ Tampa Theatre', s:'Jun 12 · Downtown', lat:27.9486, lng:-82.4608},
+      {n:'Poetry Slam @ Stageworks', s:'Jun 10 · Downtown', lat:27.9492, lng:-82.4583},
+      {n:'Flea Market at Armature', s:'Jun 16 · Tampa Heights', lat:27.9594, lng:-82.4648},
+      {n:'DJ Set @ The Ritz', s:'Jun 8 · Ybor City', lat:27.9546, lng:-82.4243},
+      {n:'Mural Tour Ybor', s:'Jun 22 · Ybor City', lat:27.9547, lng:-82.4235},
+    ]
+  },
+  Issues: {
+    listType: 'system', hasGeo: false, icon: 'ti-news', color: '#34495E',
+    action: 'View resource feed',
+    entries: [
+      {n:'Housing costs and affordability', s:'820 pts · Tampa'},
+      {n:'Public transit funding', s:'752 pts · Tampa'},
+      {n:'School funding and quality', s:'694 pts · Tampa'},
+      {n:'Public safety and policing', s:'638 pts · Tampa'},
+      {n:'Flooding and sea level risk', s:'581 pts · Tampa'},
+      {n:'Small business support', s:'524 pts · Tampa'},
+      {n:'Road and infrastructure conditions', s:'467 pts · Tampa'},
+      {n:'Green space and parks', s:'410 pts · Tampa'},
+      {n:'Homelessness and housing', s:'353 pts · Tampa'},
+      {n:'Arts and culture funding', s:'296 pts · Tampa'},
+    ]
+  },
+  Films: {
+    listType: 'system', hasGeo: false, icon: 'ti-movie', color: '#34495E',
+    action: 'Search for this film',
+    entries: [
+      {n:'Conclave', s:'Edward Berger · 2024'},
+      {n:'The Brutalist', s:'Brady Corbet · 2024'},
+      {n:'Anora', s:'Sean Baker · 2024'},
+      {n:'Nickel Boys', s:'RaMell Ross · 2024'},
+      {n:'I Saw the TV Glow', s:'Jane Schoenbrun · 2024'},
+      {n:'All We Imagine as Light', s:'Payal Kapadia · 2024'},
+      {n:'Hard Truths', s:'Mike Leigh · 2024'},
+      {n:'Challengers', s:'Luca Guadagnino · 2024'},
+      {n:'Love Lies Bleeding', s:'Rose Glass · 2024'},
+      {n:'The Substance', s:'Coralie Fargeat · 2024'},
+    ]
+  },
+  Books: {
+    listType: 'system', hasGeo: false, icon: 'ti-book', color: '#34495E',
+    action: 'Search for this book',
+    entries: [
+      {n:'Intermezzo', s:'Sally Rooney · 2024'},
+      {n:'James', s:'Percival Everett · 2024'},
+      {n:'The Women', s:'Kristin Hannah · 2024'},
+      {n:'All Fours', s:'Miranda July · 2024'},
+      {n:'The God of the Woods', s:'Laura Lippman · 2024'},
+      {n:'Orbital', s:'Samantha Harvey · 2024'},
+      {n:'Playground', s:'Richard Powers · 2024'},
+      {n:'The Familiar', s:'Leigh Bardugo · 2024'},
+      {n:'Beautyland', s:'Marie-Helene Bertino · 2024'},
+      {n:'Small Things Like These', s:'Claire Keegan · 2021'},
+    ]
+  }
+};
+
+const VD_ENTRIES = [
+  {n:'Noid', s:'Tyler, The Creator', pts:901, prev:2, pct:35},
+  {n:'Timeless', s:'The Weeknd', pts:834, prev:1, pct:32},
+  {n:'Euphoria', s:'Kendrick Lamar', pts:798, prev:3, pct:31},
+  {n:'Not Like Us', s:'Kendrick Lamar', pts:741, prev:5, pct:29},
+  {n:'Family Matters', s:'Drake', pts:688, prev:4, pct:27},
+  {n:'CARNIVAL', s:'¥$, Ye', pts:632, prev:6, pct:24},
+  {n:'Luther', s:'Kendrick Lamar', pts:589, prev:0, pct:23},
+  {n:'Squabble Up', s:'Kendrick Lamar', pts:541, prev:7, pct:21},
+  {n:'Heart Pt. 6', s:'Drake', pts:498, prev:9, pct:19},
+  {n:'Man on the Moon III', s:'Kid Cudi', pts:445, prev:8, pct:17},
+];
+
+/* ═══════════════════════════════
+   STATE
+═══════════════════════════════ */
+let currentScreen = 'onboard';
+let currentList = 'Songs';
+let panelOpen = false;
+let isLocked = false;
+let postOn = false;
+let submitted = {};
+let vdMode = 'live';
+let vdPct = 62;
+let vdCountdown = 11 * 60 + 24;
+let vdInterval = null;
+let topSortable = null, queueSortable = null;
+
+// Per-list state stored in memory (localStorage sync)
+let listState = {};
+
+function initListState() {
+  // Always rebuild from DATA first — guarantees every list has correct entries
+  listState = {};
+  Object.keys(DATA).forEach(list => {
+    const entries = DATA[list].entries;
+    listState[list] = {
+      top: entries.slice(0, 5).map(e => ({n: e.n, s: e.s})),
+      queue: entries.slice(5).map(e => ({n: e.n, s: e.s})),
+      submitted: false,
+      postOn: false,
+    };
+  });
+  // Overlay any saved top/queue changes on top of the fresh DATA
+  const saved = localStorage.getItem('pf_list_state');
+  if (saved) {
+    try {
+      const savedState = JSON.parse(saved);
+      Object.keys(savedState).forEach(list => {
+        if (listState[list] && savedState[list]) {
+          // Only restore if saved data looks like real entries (has n property)
+          if (savedState[list].top && savedState[list].top.length && savedState[list].top[0] && savedState[list].top[0].n) {
+            listState[list].top = savedState[list].top;
+          }
+          if (savedState[list].queue && savedState[list].queue.length && savedState[list].queue[0] && savedState[list].queue[0].n) {
+            listState[list].queue = savedState[list].queue;
+          }
+          listState[list].submitted = savedState[list].submitted || false;
+          listState[list].postOn = savedState[list].postOn || false;
+        }
+      });
+    } catch(e) { /* corrupt save — fresh DATA state is already set */ }
+  }
+  submitted = {};
+  Object.keys(listState).forEach(l => { submitted[l] = listState[l].submitted || false; });
+}
+
+function saveListState() {
+  Object.keys(listState).forEach(l => { listState[l].submitted = submitted[l] || false; });
+  localStorage.setItem('pf_list_state', JSON.stringify(listState));
+}
+
+/* ═══════════════════════════════
+   NAVIGATION
+═══════════════════════════════ */
+function goTo(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const nb = document.getElementById('nav-' + screen);
+  if (nb) nb.classList.add('active');
+  currentScreen = screen;
+
+  // Show back button on onboarding only when navigated from within the app
+  const backBtn = document.getElementById('obBackBtn');
+  if (backBtn) backBtn.style.display = (screen === 'onboard' && document.getElementById('navbar').style.display !== 'none') ? 'block' : 'none';
+  // Hide nav and app header on create and group screens
+  const hideChrome = ['onboard','create-list','group-home'].includes(screen);
+  const nav = document.getElementById('navbar');
+  const hdr = document.getElementById('appHeader');
+  if (screen === 'onboard') { /* already handled by enterApp */ }
+  else if (hideChrome) {
+    if (nav && nav.style.display !== 'none') nav.dataset.wasVisible = 'true';
+    if (nav) nav.style.display = 'none';
+    if (hdr) hdr.style.display = 'none';
+  } else {
+    if (nav && (nav.dataset.wasVisible || nav.style.display === 'none') && document.getElementById('screen-map')) {
+      nav.style.display = 'flex';
+      nav.removeAttribute('data-was-visible');
+    }
+    if (hdr) hdr.style.display = 'block';
+  }
+
+  if (screen === 'lists') { renderLists(); }
+  if (screen === 'map') { renderMapPanel(); }
+  if (screen === 'voteday') { renderVoteDay(); }
+  if (screen === 'feed') { renderFeed(); }
+  if (screen === 'profile') { renderProfile(); }
+}
+
+function goToLists() {
+  const sel = document.getElementById('panelSelect');
+  if (sel) switchList(sel.value);
+  closePanel();
+  goTo('lists');
+}
+
+/* ═══════════════════════════════
+   ONBOARDING
+═══════════════════════════════ */
+function selectCity(el, city) {
+  document.querySelectorAll('.ob-city-btn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById('ob-city-hidden').value = city;
+}
+
+function handleSignup(e) {
+  e.preventDefault();
+  const name = document.getElementById('ob-name').value.trim();
+  const email = document.getElementById('ob-email').value.trim();
+  if (!name || !email) { showToast('Please enter your name and email'); return; }
+
+  // Save to localStorage
+  localStorage.setItem('pf_user', JSON.stringify({name, email, city: document.getElementById('ob-city-hidden').value}));
+
+  // Netlify Forms AJAX submit
+  const form = e.target;
+  const data = new FormData(form);
+  fetch('/', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams(data).toString()})
+    .then(() => { showToast('You\'re on the list!'); setTimeout(() => enterApp(name), 1200); })
+    .catch(() => { showToast('Saved locally!'); setTimeout(() => enterApp(name), 1200); });
+}
+
+function skipOnboard() {
+  const name = document.getElementById('ob-name').value.trim() || 'User';
+  enterApp(name);
+}
+
+function enterApp(name) {
+  const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+  document.getElementById('headerAvatar').textContent = initials;
+  document.getElementById('profAvatar').textContent = initials;
+  document.getElementById('profName').textContent = name;
+  document.getElementById('navbar').style.display = 'flex';
+  // Clear any old list state so we always start from clean DATA
+  localStorage.removeItem('pf_list_state');
+  initListState();
+  renderNotifSettings();
+  goTo('map');
+  // Init Leaflet after screen is visible
+  setTimeout(() => { initLeafletMap(); renderMapDots('Songs'); }, 150);
+}
+
+/* ═══════════════════════════════
+   MAP SCREEN
+═══════════════════════════════ */
+// ── LEAFLET MAP ──
+let leafletMap = null;
+let mapMarkers = [];
+
+function initLeafletMap() {
+  if (leafletMap) return;
+  leafletMap = L.map('leaflet-map', {
+    center: [27.9550, -82.4450],
+    zoom: 13,
+    zoomControl: true,
+    attributionControl: true,
+  });
+  // CartoDB Dark Matter tiles - matches brand palette
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(leafletMap);
+  setTimeout(() => { if (leafletMap) leafletMap.invalidateSize(); }, 100);
+}
+
+function renderMapDots(listKey) {
+  if (!leafletMap) initLeafletMap();
+  // Clear existing markers
+  mapMarkers.forEach(m => leafletMap.removeLayer(m));
+  mapMarkers = [];
+  const list = DATA[listKey];
+  if (!list || !list.hasGeo) return;
+  const color = list.color;
+  list.entries.forEach((e, i) => {
+    if (!e.lat) return;
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="pf-marker" style="background:${color};width:${i<3?16:12}px;height:${i<3?16:12}px;"></div>`,
+      iconSize: [i<3?16:12, i<3?16:12],
+      iconAnchor: [i<3?8:6, i<3?8:6],
+      popupAnchor: [0, i<3?-12:-8],
+    });
+    const marker = L.marker([e.lat, e.lng], {icon})
+      .bindPopup(`<span class="pf-popup-rank">#${i+1}</span><strong>${e.n}</strong><br><span style="opacity:0.6;font-size:10px;">${e.s}</span>`)
+      .addTo(leafletMap);
+    marker.on('click', () => {
+      marker.openPopup();
+    });
+    mapMarkers.push(marker);
+  });
+}
+
+function renderMapPanel() {
+  if (!leafletMap) initLeafletMap();
+  setTimeout(() => leafletMap && leafletMap.invalidateSize(), 50);
+  const sel = document.getElementById('panelSelect');
+  const key = sel ? sel.value : 'Songs';
+  renderPanelList(key);
+  renderMapDots(key);
+}
+
+function renderPanelList(listKey) {
+  const el = document.getElementById('panelList');
+  const list = DATA[listKey];
+  if (!list) { el.innerHTML = '<div style="padding:12px;font-size:11px;color:var(--slate);opacity:0.4;">No data for this list yet.</div>'; return; }
+  const state = listState[listKey];
+  const entries = list.entries;
+  const maxPts = 900;
+  el.innerHTML = entries.map((e, i) => {
+    const hasDot = list.hasGeo && e.x;
+    const pts = Math.round(maxPts - i * 75);
+    const barW = Math.round((pts / maxPts) * 100);
+    return `<div class="panel-row ${hasDot ? 'has-dot' : ''}" onclick="openActionSheet('${e.n.replace(/'/g,"\'")}','${listKey}',${i})">
+      <span class="p-rank ${i<3?'t':''}">${i+1}</span>
+      <div class="p-info">
+        <div class="p-name">${e.n}</div>
+        <div class="p-sub">${e.s}</div>
+      </div>
+      <div class="p-bar-bg"><div class="p-bar" style="width:${barW}%;"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function togglePanel() {
+  panelOpen = !panelOpen;
+  const panel = document.getElementById('mapPanel');
+  const btn = document.getElementById('mapOpenBtn');
+  panel.classList.toggle('open', panelOpen);
+  btn.textContent = panelOpen ? 'Rankings ↓' : 'Rankings ↑';
+  if (panelOpen) { renderMapPanel(); }
+  // Resize Leaflet after panel animation completes
+  setTimeout(() => { if (leafletMap) leafletMap.invalidateSize(); }, 320);
+  setTimeout(() => { if (leafletMap) leafletMap.invalidateSize(); }, 100);
+}
+
+function closePanel() {
+  panelOpen = false;
+  document.getElementById('mapPanel').classList.remove('open');
+  document.getElementById('mapOpenBtn').textContent = 'Rankings ↑';
+}
+
+function switchPanelList(val) {
+  renderPanelList(val);
+  renderMapDots(val);
+}
+
+/*
+ * openActionSheet(name, listKey, idx, context)
+ * context: 'map'   - from map panel (open external, view, share)
+ *          'top'   - from top ten in lists screen (open external, move to queue, share)
+ *          'queue' - from queue in lists screen (open external, add to top ten, remove, share)
+ */
+function openActionSheet(name, listKey, idx, context) {
+  context = context || 'map';
+  const list = DATA[listKey];
+  const subs = {
+    Songs:'Song · Tampa rankings', Restaurants:'Restaurant · Tampa',
+    Venues:'Venue · Tampa', Events:'Event · Tampa',
+    Issues:'Issue · Tampa', Films:'Film', Books:'Book'
+  };
+  const action = list ? list.action : 'Open externally';
+  const icon = list ? list.icon : 'ti-external-link';
+  const rankLabel = (idx !== null && idx !== undefined) ? '#' + (idx+1) + ' · ' + name : name;
+
+  document.getElementById('asTitle').textContent = rankLabel;
+  document.getElementById('asSub').textContent = subs[listKey] || 'Tampa rankings';
+
+  let btns = '';
+
+  // Primary: open externally — always shown
+  btns += `<button class="as-btn primary" onclick="closeSheet();showToast('Opening ${name}')">
+    <i class="ti ti-external-link"></i><span>${action}</span>
+  </button>`;
+
+  if (context === 'map') {
+    btns += `<button class="as-btn" onclick="closeSheet()">
+      <i class="ti ti-list-check"></i> View on PeakFeed
+    </button>`;
+  }
+
+  if (context === 'top') {
+    btns += `<button class="as-btn" onclick="closeSheet();removeFromTop(${idx})">
+      <i class="ti ti-arrow-down"></i> Move to queue
+    </button>`;
+  }
+
+  if (context === 'queue') {
+    const st = listState[currentList];
+    const topFull = st && st.top.filter(x=>x).length >= 10;
+    if (!topFull && !checkLocked()) {
+      btns += `<button class="as-btn" onclick="closeSheet();promote(${idx})">
+        <i class="ti ti-arrow-up"></i> Add to top ten
+      </button>`;
+    }
+    btns += `<button class="as-btn" onclick="closeSheet();deleteQueue(${idx})">
+      <i class="ti ti-trash"></i> Remove from queue
+    </button>`;
+  }
+
+  // Share — always shown
+  btns += `<button class="as-btn" onclick="closeSheet();showToast('Link copied')">
+    <i class="ti ti-share"></i> Share this entry
+  </button>`;
+
+  // Close
+  btns += `<button class="as-btn" style="color:rgba(52,73,94,0.4);" onclick="closeSheet()">
+    <i class="ti ti-x"></i> Close
+  </button>`;
+
+  document.getElementById('asButtons').innerHTML = btns;
+  document.getElementById('actionSheet').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('actionSheet').classList.remove('open');
+}
+
+// Map clicks handled by Leaflet
+
+/* ═══════════════════════════════
+   LISTS SCREEN
+═══════════════════════════════ */
+function toggleListSearch() {
+  const searchRow = document.getElementById('lhSearch');
+  const dropdown = document.getElementById('listDropdown');
+  const normalRow = document.getElementById('lhNormal');
+  const showing = searchRow.classList.contains('show');
+  if (showing) {
+    closeListSearch();
+  } else {
+    searchRow.classList.add('show');
+    dropdown.style.display = 'block';
+    normalRow.style.display = 'none';
+    document.getElementById('listSearchInput').focus();
+  }
+}
+
+function closeListSearch() {
+  document.getElementById('lhSearch').classList.remove('show');
+  document.getElementById('listDropdown').style.display = 'none';
+  document.getElementById('lhNormal').style.display = 'flex';
+  document.getElementById('listSearchInput').value = '';
+}
+
+function filterListSearch(val) {
+  document.querySelectorAll('.lh-opt').forEach(o => {
+    o.style.display = o.textContent.toLowerCase().includes(val.toLowerCase()) ? 'flex' : 'none';
+  });
+}
+
+function switchList(listKey) {
+  currentList = listKey;
+  closeListSearch();
+  document.querySelectorAll('.lh-opt').forEach(o => o.classList.remove('sel'));
+  const opt = document.getElementById('lopt-' + listKey);
+  if (opt) opt.classList.add('sel');
+  document.getElementById('listTitleText').textContent = listKey;
+  renderLists();
+}
+
+function renderLists() {
+  const state = listState[currentList] || {top:[], queue:[]};
+  const isLockDay = checkLocked();
+  const subbed = submitted[currentList] || false;
+
+  // Update header
+  document.getElementById('listSubBadge').style.display = subbed ? 'inline' : 'none';
+  document.getElementById('topSecSub').textContent = isLockDay ? 'locked until monday' : 'drag to reorder';
+  document.getElementById('lockedNotice').style.display = isLockDay ? 'block' : 'none';
+
+  // Vote bar — real day countdown
+  const vNow = new Date();
+  const vDay = vNow.getDay(); // 0=Sun
+  let vTimeStr = '';
+  if (!isLockDay) {
+    if (vDay === 0) {
+      const vHour = vNow.getHours();
+      vTimeStr = vHour >= 18 ? 'Live now · Results tonight' : 'Today · Opens at 6pm';
+    } else {
+      const daysLeft = (7 - vDay) % 7 || 7;
+      vTimeStr = daysLeft === 1 ? 'Tomorrow · Opens 6pm' : 'Sunday · ' + daysLeft + ' days away';
+    }
+  }
+  document.getElementById('vbsLabel').textContent = isLockDay ? '🔒 Vote weekend' : 'Vote day';
+  document.getElementById('vbsTime').textContent = isLockDay ? 'Locked · Opens Monday' : vTimeStr;
+
+  // Detect list type and adapt bottom bar
+  const listDef = DATA[currentList] || {};
+  const isPersonal = listDef.listType === 'personal';
+  const isGroupList = listDef.listType === 'group-list';
+  const isCivic = !isPersonal && !isGroupList; // system lists
+
+  // Section header label
+  const secLabel = document.querySelector('.ls-sec-label');
+  if (secLabel) secLabel.textContent = isPersonal ? 'My Ranking' : 'Top Ten · Your Vote';
+
+  // Post toggle — only for civic/group lists
+  document.getElementById('postToggle').classList.toggle('disabled', isLockDay || isPersonal);
+  document.getElementById('postToggle').classList.toggle('on', !isLockDay && !isPersonal && (state.postOn || false));
+
+  // Submit button
+  const btn = document.getElementById('submitBtn');
+  if (isPersonal) {
+    btn.textContent = 'Share list';
+    btn.disabled = false;
+    btn.className = 'btn-submit';
+    btn.onclick = () => { showToast('List share link copied'); };
+  } else if (isLockDay) {
+    btn.textContent = 'Locked until Monday';
+    btn.disabled = true;
+    btn.className = 'btn-submit';
+    btn.onclick = null;
+  } else if (subbed) {
+    btn.textContent = 'Revise submission';
+    btn.className = 'btn-submit submitted';
+    btn.disabled = false;
+    btn.onclick = handleSubmit;
+  } else {
+    btn.textContent = isGroupList ? 'Submit group vote' : 'Submit to vote';
+    btn.className = 'btn-submit';
+    btn.disabled = false;
+    btn.onclick = handleSubmit;
+  }
+
+  // Vote bar — hide for personal lists
+  const vbs = document.getElementById('voteBarStrip');
+  if (vbs) vbs.style.display = isPersonal ? 'none' : 'flex';
+  // Post row label
+  const postLabel = document.querySelector('.post-label');
+  if (postLabel) postLabel.textContent = isPersonal ? 'Make this list public' : 'Post changes to feed';
+
+  renderTopTen(state, isLockDay);
+  renderQueue(state, isLockDay);
+  renderShareCard();
+
+  // Destroy old sortables
+  if (topSortable) { try { topSortable.destroy(); } catch(e){} topSortable = null; }
+  if (queueSortable) { try { queueSortable.destroy(); } catch(e){} queueSortable = null; }
+
+  // Init Sortable for top ten
+  if (!isLockDay && typeof Sortable !== 'undefined') {
+    const topEl = document.getElementById('topTenZone');
+    topSortable = new Sortable(topEl, {
+      animation: 150, handle: '.ti-grip', ghostClass: 'sortable-ghost',
+      filter: '.empty-item', preventOnFilter: false,
+      onEnd: (evt) => {
+        const st = listState[currentList];
+        const item = st.top.splice(evt.oldIndex, 1)[0];
+        if (item) { st.top.splice(evt.newIndex, 0, item); }
+        markUnsaved();
+        renderTopTen(st, false);
+      }
+    });
+    const qEl = document.getElementById('queueZone');
+    queueSortable = new Sortable(qEl, {
+      animation: 150, handle: '.q-grip', ghostClass: 'sortable-ghost',
+      filter: '.add-queue-row',
+      onEnd: (evt) => {
+        const st = listState[currentList];
+        const item = st.queue.splice(evt.oldIndex, 1)[0];
+        if (item) { st.queue.splice(evt.newIndex, 0, item); }
+        markUnsaved();
+      }
+    });
+  }
+}
+
+function renderTopTen(state, locked) {
+  const el = document.getElementById('topTenZone');
+  const rows = [];
+  for (let i = 0; i < 10; i++) {
+    const item = state.top[i];
+    if (item) {
+      rows.push(`<div class="top-item" onclick="openActionSheet('${item.n.replace(/'/g,"\'")}','${currentList}',${i},'top')">
+        <span class="ti-grip ${locked?'locked':''} ti ti-grip-vertical" onclick="event.stopPropagation()"></span>
+        <span class="ti-num ${i<3?'t':''}">${i+1}</span>
+        <div class="ti-info"><div class="ti-name">${item.n}</div><div class="ti-sub">${item.s}</div></div>
+        <div class="ti-moves" onclick="event.stopPropagation()">
+          ${!locked ? `<button class="mv-btn" onclick="moveUp(${i})" ${i===0?'disabled':''}>↑</button>
+          <button class="mv-btn" onclick="moveDown(${i})" ${i>=state.top.filter(x=>x).length-1?'disabled':''}>↓</button>
+          <button class="rm-btn" onclick="removeFromTop(${i})"><i class="ti ti-x"></i></button>` : ''}
+          <span style="font-size:11px;color:rgba(52,73,94,0.2);padding:0 4px;">›</span>
+        </div>
+      </div>`);
+    } else {
+      rows.push(`<div class="top-item empty"><span class="ti-num" style="color:rgba(52,73,94,0.1);">${i+1}</span><span class="empty-slot" style="font-size:10px;color:rgba(52,73,94,0.2);padding:0 8px;">Empty slot</span></div>`);
+    }
+  }
+  el.innerHTML = rows.join('');
+}
+
+function renderQueue(state, locked) {
+  const el = document.getElementById('queueZone');
+  const topFull = state.top.filter(x=>x).length >= 10;
+  const rows = state.queue.map((item, i) => `
+    <div class="queue-item" style="cursor:pointer;" onclick="openActionSheet('${item.n.replace(/'/g,"\'")}','${currentList}',${i},'queue')">
+      <span class="q-grip ti ti-grip-vertical" onclick="event.stopPropagation()"></span>
+      <div class="q-info"><div class="q-name">${item.n}</div><div class="q-sub">${item.s}</div></div>
+      <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;">
+        <button class="promote-btn" onclick="event.stopPropagation();promote(${i})" ${locked||topFull?'disabled':''}>+ Top Ten</button>
+        <span style="font-size:13px;color:rgba(52,73,94,0.2);padding:0 4px;">›</span>
+      </div>
+    </div>`).join('');
+  el.innerHTML = rows + `<div class="add-queue-row"><button class="add-queue-btn" onclick="showToast('Paste a URL or share from another app')">+ Add to queue</button></div>`;
+}
+
+function moveUp(i) {
+  const st = listState[currentList];
+  if (i === 0 || !st.top[i]) return;
+  [st.top[i-1], st.top[i]] = [st.top[i], st.top[i-1]];
+  markUnsaved(); renderLists();
+}
+
+function moveDown(i) {
+  const st = listState[currentList];
+  const filled = st.top.filter(x=>x).length;
+  if (!st.top[i] || i >= filled - 1) return;
+  [st.top[i+1], st.top[i]] = [st.top[i], st.top[i+1]];
+  markUnsaved(); renderLists();
+}
+
+function removeFromTop(i) {
+  const st = listState[currentList];
+  const item = st.top[i];
+  if (!item) return;
+  st.queue.unshift(item);
+  st.top.splice(i, 1);
+  markUnsaved(); renderLists();
+  showToast(item.n + ' moved to queue');
+}
+
+function promote(i) {
+  const st = listState[currentList];
+  const slot = st.top.findIndex(x => !x);
+  const emptySlot = slot !== -1 ? slot : (st.top.length < 10 ? st.top.length : -1);
+  if (emptySlot === -1 || checkLocked()) { showToast('Top ten is full — remove one first'); return; }
+  const item = st.queue.splice(i, 1)[0];
+  if (emptySlot < st.top.length) { st.top[emptySlot] = item; }
+  else { st.top.push(item); }
+  markUnsaved(); renderLists();
+  showToast(item.n + ' added at #' + (emptySlot + 1));
+}
+
+function deleteQueue(i) {
+  const st = listState[currentList];
+  if (!st || !st.queue[i]) return;
+  const item = st.queue.splice(i, 1)[0];
+  saveListState();
+  renderLists();
+  showToast(item.n + ' removed');
+}
+
+function markUnsaved() {
+  submitted[currentList] = false;
+  document.getElementById('listSubBadge').style.display = 'none';
+  document.getElementById('submitBtn').textContent = 'Submit to vote';
+  document.getElementById('submitBtn').className = 'btn-submit';
+}
+
+function togglePost() {
+  if (checkLocked()) return;
+  const st = listState[currentList];
+  st.postOn = !st.postOn;
+  document.getElementById('postToggle').classList.toggle('on', st.postOn);
+}
+
+function saveList() {
+  saveListState();
+  showToast('List saved as draft');
+}
+
+function handleSubmit() {
+  if (checkLocked()) return;
+  const st = listState[currentList];
+  const filled = st.top.filter(x=>x).length;
+  if (submitted[currentList]) {
+    submitted[currentList] = false;
+    saveListState();
+    renderLists();
+    showToast('Submission withdrawn. Revise and resubmit before vote day.');
+    return;
+  }
+  if (filled === 0) { showToast('Add at least one entry before submitting.'); return; }
+  submitted[currentList] = true;
+  saveListState();
+  renderLists();
+  const msg = (st.postOn) ? 'Submitted · Changes posted to feed' : 'Submitted to vote ✓';
+  showToast(msg);
+  setTimeout(() => goTo('confirm'), 1400);
+}
+
+function checkLocked() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun, 5=Fri, 6=Sat
+  const hour = now.getHours();
+  // Locked: Friday 8pm (20:00) through Sunday midnight
+  const locked = (day === 5 && hour >= 20) || day === 6 || (day === 0);
+  document.getElementById('listsBadge').style.display = !locked && !submitted[currentList] ? 'block' : 'none';
+  return locked;
+}
+
+/* ═══════════════════════════════
+   VOTE DAY DASHBOARD
+═══════════════════════════════ */
+function renderVoteDay() {
+  // Update date and time from actual system clock
+  const now = new Date();
+  const day = now.getDay(); // 0=Sunday
+  const hour = now.getHours();
+  const isVoteNight = (day === 0 && hour >= 18);
+
+  const timeStr = now.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  const fullDate = now.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+  const shortDate = now.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+  const el_liveDate = document.getElementById('vdLiveDate');
+  const el_clock = document.getElementById('vdClock');
+  const el_resultsDate = document.getElementById('vdResultsDate');
+  if (el_liveDate) el_liveDate.textContent = fullDate;
+  if (el_clock) el_clock.textContent = timeStr;
+  if (el_resultsDate) el_resultsDate.textContent = shortDate + ' · Final';
+
+  // Auto-set live mode on actual vote night (Sunday after 6pm)
+  if (isVoteNight && vdMode !== 'live') setVdMode('live');
+
+  renderVdRankings();
+  if (vdMode === 'live' && !vdInterval) {
+    vdInterval = setInterval(tickCountdown, 1000);
+  }
+  // Update clock every minute while on screen
+  if (!renderVoteDay._clockTimer) {
+    renderVoteDay._clockTimer = setInterval(() => {
+      if (currentScreen === 'voteday') {
+        const n = new Date();
+        const cl = document.getElementById('vdClock');
+        if (cl) cl.textContent = n.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+      }
+    }, 60000);
+  }
+}
+
+function renderVdRankings() {
+  const el = document.getElementById('vdRankings');
+  const pct = vdPct;
+  const isLive = vdMode === 'live';
+  el.innerHTML = VD_ENTRIES.map((e, i) => {
+    const barW = Math.round((e.pts / VD_ENTRIES[0].pts) * 100);
+    const dispPts = isLive ? Math.round(e.pts * pct / 100) : e.pts;
+    const dispPct = isLive ? Math.round(e.pct * pct / 100) : e.pct;
+    const dispBar = isLive ? Math.round(barW * pct / 100) : barW;
+    let move = '';
+    if (isLive) {
+      if (e.prev === 0) move = `<span class="vd-move mv-new">NEW</span>`;
+      else if (e.prev > i+1) move = `<span class="vd-move mv-up">↑${e.prev-(i+1)}</span>`;
+      else if (e.prev < i+1) move = `<span class="vd-move mv-dn">↓${(i+1)-e.prev}</span>`;
+      else move = `<span class="vd-move mv-st">━</span>`;
+    } else {
+      move = `<span class="vd-move" style="min-width:22px;"></span>`;
+    }
+    return `<div class="vd-row">
+      <span class="vd-num ${i<3?'t':''}">${i+1}</span>
+      ${move}
+      <div class="vd-info"><div class="vd-name">${e.n}</div><div class="vd-sub-name">${e.s}</div></div>
+      <div class="vd-right">
+        <div class="vd-rbar-bg"><div class="vd-rbar" style="width:${dispBar}%;"></div></div>
+        <span class="vd-pct-txt">${dispPct}%</span>
+        <span class="vd-pts">${dispPts} pts</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setVdMode(mode) {
+  vdMode = mode;
+  const live = mode === 'live';
+  document.getElementById('vdHeaderLive').style.display = live ? 'block' : 'none';
+  document.getElementById('vdHeaderResults').style.display = live ? 'none' : 'block';
+  document.getElementById('vdProgress').style.display = live ? 'block' : 'none';
+  document.getElementById('vdStats').style.display = live ? 'none' : 'flex';
+  if (!live && vdInterval) { clearInterval(vdInterval); vdInterval = null; }
+  if (live && !vdInterval) { vdInterval = setInterval(tickCountdown, 1000); }
+  renderVdRankings();
+  updateNotifStrip();
+}
+
+function tickCountdown() {
+  vdCountdown--;
+  if (vdCountdown <= 0) {
+    vdPct = Math.min(vdPct + 15, 100);
+    vdCountdown = 14 * 60 + 55;
+    document.getElementById('vdPct').textContent = vdPct + '%';
+    document.getElementById('vdBar').style.width = vdPct + '%';
+    const counted = Math.round(2571 * vdPct / 100);
+    document.getElementById('vdVoteCount').textContent = counted.toLocaleString() + ' of 2,571';
+    document.getElementById('vdFooter').textContent = counted.toLocaleString() + ' votes · 2,571 eligible · Tampa';
+    renderVdRankings();
+    if (currentScreen === 'voteday') showToast('Results updated · ' + vdPct + '% counted');
+    return;
+  }
+  const m = Math.floor(vdCountdown / 60);
+  const s = vdCountdown % 60;
+  const el = document.getElementById('vdNextLabel');
+  if (el) el.textContent = 'Next update: ' + m + ':' + s.toString().padStart(2,'0');
+}
+
+function updateNotifStrip() {
+  const live = vdMode === 'live';
+  document.getElementById('notifDot').classList.toggle('pulse', live);
+  document.getElementById('notifText').textContent = live
+    ? `VOTE DAY · SONGS · TAMPA · ${vdPct}% COUNTED`
+    : 'FINAL RESULTS · SONGS · TAMPA · SUNDAY JUNE 1';
+  document.getElementById('notifCta').textContent = live ? 'LIVE ↗' : 'VIEW ↗';
+}
+
+/* Vote Day mode toggle (added as buttons below header) */
+document.getElementById('vdHeaderLive').insertAdjacentHTML('afterend',
+  `<div style="background:var(--rust-deep);padding:5px 12px;display:flex;gap:6px;flex-shrink:0;">
+    <button onclick="setVdMode('live')" id="vdBtnLive" style="flex:1;padding:4px;border-radius:12px;font-size:10px;font-weight:500;cursor:pointer;background:var(--mist);color:var(--rust);border:none;">Vote Night (Live)</button>
+    <button onclick="setVdMode('results')" id="vdBtnRes" style="flex:1;padding:4px;border-radius:12px;font-size:10px;font-weight:500;cursor:pointer;background:transparent;color:var(--mist-dark);border:0.5px solid rgba(195,211,222,0.2);">Results Week</button>
+  </div>`);
+
+/* ═══════════════════════════════
+   FEED SCREEN
+═══════════════════════════════ */
+const FEED_CARDS = [
+  {type:'vote', av:'MR', avColor:'', name:'Maria R.', action:'submitted her <strong>Restaurants</strong> vote', time:'12 min ago · Tampa, FL', tag:'Restaurants',
+   list:['Ulele','Oxford Exchange','Mise en Place'], pcts:[100,82,74], extra:'+5 more · tap to view full list'},
+  {type:'entry', av:'DK', avColor:'slate', name:'DJ Kool Tampa', action:'added a new entry to <strong>Songs</strong>', time:'34 min ago · Tampa, FL', tag:'Songs',
+   entry:{icon:'ti-music', name:'Noid', sub:'Tyler, The Creator · 2023', rank:'#1'}, caption:'"This has been on repeat since it dropped. Tampa needs to push this."'},
+  {type:'campaign', av:'SL', avColor:'olive', name:'Sofia L.', action:'is campaigning for <strong>Ulele</strong>', time:'1h ago · Tampa, FL', tag:'Restaurants',
+   entry:{icon:'ti-tools-kitchen-2', name:'Ulele', sub:'Native Cuisine · Tampa Heights'},
+   bars:[{n:'Ulele',pct:100},{n:'Oxford Exchange',pct:82},{n:'Mise en Place',pct:74}],
+   caption:'"If you haven\'t had the duck confit here you literally don\'t know Tampa food. Vote it up."'},
+  {type:'group', av:'SH', avColor:'group', name:'Sneaker Heads Tampa', action:'posted vote day results · <strong>14 members voted</strong>', time:'2h ago · Group', tag:'Group · Custom list',
+   winner:'Jordan 4 Retro Military Blue', runner:'New Balance 990v6',
+   list:["Jordan 4 'Military Blue'", 'New Balance 990v6', 'Adidas Samba OG'], pcts:[100,71,58], extra:'+7 more · tap to view full results'},
+  {type:'update', av:'AT', avColor:'slate', name:'Alex T.', action:'updated their <strong>Venues</strong> list · moved Crowbar to #1', time:'3h ago · Tampa, FL', tag:'Venues',
+   entry:{icon:'ti-building', name:'Crowbar', sub:'Venue · Ybor City · Tampa', rank:'#1'}},
+];
+
+function renderFeed() {
+  const el = document.getElementById('feedBody');
+  el.innerHTML = FEED_CARDS.map(c => buildCard(c)).join('') +
+    '<div class="feed-end">You\'re caught up · 5 posts from the last 24 hours</div>';
+}
+
+function buildCard(c) {
+  const avStyle = c.avColor === 'slate' ? 'class="fc-av slate"' : c.avColor === 'olive' ? 'class="fc-av olive"' : c.avColor === 'group' ? 'class="fc-av group"' : 'class="fc-av"';
+  let inner = `<div class="feed-card" onclick="showToast('Opening ${c.name}')">
+    <div class="fc-top">
+      <div ${avStyle}>${c.av}</div>
+      <div class="fc-meta">
+        <div class="fc-name">${c.name}</div>
+        <div class="fc-action">${c.action}</div>
+        <div class="fc-time">${c.time}</div>
+        <span class="fc-tag">${c.tag}</span>
+      </div>
+    </div>`;
+  if (c.type === 'vote') {
+    inner += `<div class="fc-submitted"><span class="fc-sub-icon">✓</span><div><div class="fc-sub-text">Vote submitted · 8 entries ranked</div><div class="fc-sub-city">Tampa · ${c.tag} · This cycle</div></div></div>
+    <div class="fc-preview">${c.list.map((n,i) => `<div class="fp-row"><span class="fp-num ${i<3?'t':''}">${i+1}</span><span class="fp-name">${n}</span><div class="fp-bar-bg"><div class="fp-bar" style="width:${c.pcts[i]}%;"></div></div></div>`).join('')}
+    <div class="fp-more">${c.extra}</div></div>`;
+  } else if (c.type === 'entry') {
+    inner += `<div class="fc-entry"><div class="fc-entry-inner"><div class="fc-entry-icon"><i class="ti ${c.entry.icon}"></i></div><div class="fc-entry-info"><div class="fc-entry-name">${c.entry.name}</div><div class="fc-entry-sub">${c.entry.sub}</div></div><div class="fc-entry-rank">${c.entry.rank}</div></div></div>
+    <div class="fc-caption">${c.caption}</div>`;
+  } else if (c.type === 'campaign') {
+    inner += `<div class="fc-entry"><div class="fc-entry-inner"><div class="fc-entry-icon"><i class="ti ${c.entry.icon}"></i></div><div class="fc-entry-info"><div class="fc-entry-name">${c.entry.name}</div><div class="fc-entry-sub">${c.entry.sub}</div></div></div></div>
+    <div class="fc-campaign"><div class="fc-camp-label">Current standings · Tampa · ${vdPct}% counted</div>${c.bars.map(b => `<div class="fc-camp-row"><span class="fc-camp-name">${b.n}</span><div class="fc-camp-bar-bg"><div class="fc-camp-bar" style="width:${b.pct}%;"></div></div><span class="fc-camp-pct">${b.pct === 100 ? 33 : b.pct === 82 ? 28 : 27}%</span></div>`).join('')}</div>
+    <div class="fc-caption">${c.caption}</div>`;
+  } else if (c.type === 'group') {
+    inner += `<div class="fc-group-result"><div><div class="fc-gr-label">This cycle's winner</div><div class="fc-gr-winner">${c.winner}</div></div><div style="text-align:right;"><div class="fc-gr-label">Runner up</div><div class="fc-gr-runner">${c.runner}</div></div></div>
+    <div class="fc-preview">${c.list.map((n,i) => `<div class="fp-row"><span class="fp-num ${i<3?'t':''}">${i+1}</span><span class="fp-name">${n}</span><div class="fp-bar-bg"><div class="fp-bar" style="width:${c.pcts[i]}%;"></div></div></div>`).join('')}
+    <div class="fp-more">${c.extra}</div></div>`;
+  } else if (c.type === 'update') {
+    inner += `<div class="fc-entry"><div class="fc-entry-inner"><div class="fc-entry-icon"><i class="ti ${c.entry.icon}"></i></div><div class="fc-entry-info"><div class="fc-entry-name">${c.entry.name}</div><div class="fc-entry-sub">${c.entry.sub}</div></div><div class="fc-entry-rank">${c.entry.rank}</div></div></div>`;
+  }
+  return inner + '</div>';
+}
+
+function setFeedFilter(el) {
+  document.querySelectorAll('.ff-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  showToast('Filter: ' + el.textContent.trim());
+}
+
+/* ═══════════════════════════════
+   PROFILE & NOTIFICATIONS
+═══════════════════════════════ */
+const NOTIF_SETTINGS = [
+  {cat:'Ranking alerts', items:[
+    {label:'Rank position change', sub:'Notify only when an entry you\'ve ranked changes its community position number — not every update.', special:'Distinct feature', key:'rank_change', def:true},
+    {label:'Top three changes only', sub:'Sub-option: only notify when a position change affects the top three.', key:'rank_top3', def:false},
+  ]},
+  {cat:'Vote day', items:[
+    {label:'Reminder the day before', sub:'', key:'vd_day_before', def:true},
+    {label:'Reminder 3 hours before 6pm', sub:'', key:'vd_3hr', def:true},
+    {label:'Live counting begins at 6pm', sub:'', key:'vd_start', def:true},
+    {label:'Final results posted', sub:'', key:'vd_final', def:true},
+    {label:'Live update alerts every 15 min', sub:'High frequency. Opt in for the full election-night experience.', key:'vd_updates', def:false},
+  ]},
+  {cat:'Submission', items:[
+    {label:'Warning: 24 hours before vote day closes', sub:'', key:'sub_24', def:true},
+    {label:'Warning: 3 hours before close', sub:'', key:'sub_3hr', def:true},
+  ]},
+  {cat:'Social', items:[
+    {label:'New follower', sub:'', key:'soc_follower', def:true},
+    {label:'Someone you follow submits their vote', sub:'High volume at scale. Off by default.', key:'soc_vote', def:false},
+    {label:'Someone campaigns for an entry you ranked', sub:'', key:'soc_campaign', def:true},
+  ]},
+  {cat:'Groups', items:[
+    {label:'New member joins your group', sub:'', key:'grp_member', def:true},
+    {label:'Group vote day opens', sub:'', key:'grp_vote', def:true},
+    {label:'Group results posted', sub:'', key:'grp_results', def:true},
+    {label:'New entry added to group ballot', sub:'', key:'grp_entry', def:true},
+  ]},
+];
+
+let notifState = {};
+
+function initNotifState() {
+  const saved = localStorage.getItem('pf_notifs');
+  if (saved) { try { notifState = JSON.parse(saved); } catch(e) { notifState = {}; } }
+  NOTIF_SETTINGS.forEach(cat => cat.items.forEach(item => {
+    if (notifState[item.key] === undefined) notifState[item.key] = item.def;
+  }));
+}
+
+function renderNotifSettings() {
+  initNotifState();
+  const el = document.getElementById('notificationsBody');
+  if (!el) return;
+  let html = '';
+  NOTIF_SETTINGS.forEach(cat => {
+    html += `<div style="font-size:9px;letter-spacing:1px;color:var(--rust);text-transform:uppercase;font-weight:500;margin:10px 0 6px;opacity:0.7;">${cat.cat}</div>`;
+    cat.items.forEach(item => {
+      html += `<div class="notif-row">
+        <div class="notif-info">
+          <div class="notif-label">${item.label}</div>
+          ${item.sub ? `<div class="notif-sub">${item.sub}</div>` : ''}
+          ${item.special ? `<span class="notif-tag">${item.special}</span>` : ''}
+        </div>
+        <div class="toggle ${notifState[item.key] ? 'on' : ''}" onclick="toggleNotif('${item.key}')"><div class="toggle-k"></div></div>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+function toggleNotif(key) {
+  notifState[key] = !notifState[key];
+  localStorage.setItem('pf_notifs', JSON.stringify(notifState));
+  renderNotifSettings();
+}
+
+function toggleSection(id) {
+  const body = document.getElementById(id + 'Body');
+  const icon = document.getElementById(id + 'Icon');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (icon) { icon.className = open ? 'ti ti-chevron-down prof-section-icon' : 'ti ti-chevron-up prof-section-icon'; }
+  if (id === 'notifications' && !open) renderNotifSettings();
+}
+
+function renderProfile() {
+  renderShareCard();
+}
+
+function renderShareCard() {
+  const el = document.getElementById('shareCardList');
+  if (!el) return;
+  const st = listState[currentList];
+  if (!st) return;
+  el.innerHTML = st.top.filter(x=>x).slice(0,10).map((item, i) =>
+    `<div class="sc-row"><span class="sc-n ${i<3?'t':''}">${i+1}</span><span class="sc-nm">${item.n}</span></div>`
+  ).join('');
+}
+
+/* ═══════════════════════════════
+   UTILITY
+═══════════════════════════════ */
+function showToast(msg) {
+  const t = document.getElementById('globalToast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 2200);
+}
+
+/* ═══════════════════════════════
+   INIT
+═══════════════════════════════ */
+/* ═══════════════════════════════
+   GROUP HOME SCREEN
+═══════════════════════════════ */
+
+// Demo group data
+const DEMO_GROUPS = {
+  'Sneaker Heads Tampa': {
+    members: ['MR', 'DK', 'SL', 'AT'],
+    memberCount: 14,
+    lists: [
+      {name: 'Current Favorites', cadence: 'weekly', nextVote: 'Sunday · 3 days', entries: 8},
+      {name: 'Best Drops 2025', cadence: 'monthly', nextVote: 'Jul 6 · 23 days', entries: 12},
+      {name: 'Most Hyped Right Now', cadence: 'on-demand', nextVote: 'On demand', entries: 5},
+    ]
+  }
+};
+
+function openGroupHome(groupKey) {
+  closeListSearch();
+  const group = DEMO_GROUPS[groupKey] || {members:['MR'],memberCount:1,lists:[]};
+  document.getElementById('groupHomeName').textContent = groupKey;
+  // Avatars
+  const avEl = document.getElementById('ghMemberAvatars');
+  avEl.innerHTML = group.members.slice(0,4).map((m,i) =>
+    `<div style="width:24px;height:24px;border-radius:50%;background:${['#5E2524','#34495E','#656B59','#4a1c1b'][i]};border:1.5px solid var(--rust-deep);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:9px;color:var(--mist);margin-left:${i>0?'-4px':'0'};">${m}</div>`
+  ).join('');
+  document.getElementById('ghMemberCount').textContent = group.memberCount + ' members';
+  // Lists
+  const listsEl = document.getElementById('ghLists');
+  listsEl.innerHTML = group.lists.length ? group.lists.map(l => `
+    <div onclick="openGroupList('${groupKey}','${l.name}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--border);background:var(--card);cursor:pointer;">
+      <div style="flex:1;">
+        <div style="font-size:12px;font-weight:500;color:var(--slate);">${l.name}</div>
+        <div style="font-size:10px;color:var(--slate);opacity:0.4;margin-top:2px;">${l.cadence} · ${l.entries} entries · ${l.nextVote}</div>
+      </div>
+      <div style="font-size:14px;color:rgba(52,73,94,0.25);">›</div>
+    </div>`).join('') :
+    '<div style="padding:20px;text-align:center;font-size:11px;color:rgba(52,73,94,0.3);">No lists yet. Create the first one.</div>';
+  goTo('group-home');
+}
+
+function openGroupList(groupKey, listName) {
+  const key = groupKey + ' · ' + listName;
+  if (!DATA[key]) {
+    DATA[key] = {listType:'group-list',hasGeo:false,icon:'ti-users',color:'#34495E',action:'View entry',custom:true,isGroup:true,entries:[]};
+    listState[key] = {top:[],queue:[],submitted:false,postOn:false};
+    submitted[key] = false;
+  }
+  switchList(key);
+  goTo('lists');
+}
+
+/* ═══════════════════════════════
+   CREATE LIST / GROUP
+═══════════════════════════════ */
+let createListType = 'personal';
+let createCadence = 'weekly';
+let identifierFieldCount = 1;
+
+function openCreateList(type) {
+  type = type || 'personal';
+  // Reset form
+  identifierFieldCount = 1;
+  document.getElementById('createListName').value = '';
+  document.getElementById('identifierFields').innerHTML = `
+    <div class="create-field-row">
+      <div class="create-field-num">1</div>
+      <input class="create-field-input" type="text" placeholder="e.g., Brand" id="cfield0" maxlength="24">
+    </div>`;
+  document.getElementById('addFieldBtn').style.display = 'block';
+  // Reset cadence
+  document.querySelectorAll('.create-cadence-opt').forEach(o => o.classList.remove('sel'));
+  const wkly = document.querySelector('.create-cadence-opt[data-val="weekly"]');
+  if (wkly) wkly.classList.add('sel');
+  createCadence = 'weekly';
+  // Set type
+  setCreateType(type);
+  closeListSearch();
+  goTo('create-list');
+}
+
+function closeCreateList() {
+  goTo('lists');
+}
+
+function setCreateType(type) {
+  createListType = type;
+  const isGroup = type === 'group';
+  document.getElementById('typeTabPersonal').classList.toggle('active', !isGroup);
+  document.getElementById('typeTabGroup').classList.toggle('active', isGroup);
+  document.getElementById('groupInviteSection').style.display = isGroup ? 'block' : 'none';
+  document.getElementById('groupBallotNote').style.display = isGroup ? 'block' : 'none';
+  document.getElementById('createHeaderTitle').textContent = isGroup ? 'New Group' : 'New List';
+  document.getElementById('createNameLabel').textContent = isGroup ? 'Group name' : 'List name';
+  document.getElementById('createListName').placeholder = isGroup ? 'e.g., Sneaker Heads Tampa, Film Club…' : 'e.g., Sneakers, Dog Parks, Local Murals…';
+  document.getElementById('createSubmitBtn').textContent = isGroup ? 'Create group' : 'Create list';
+}
+
+function selectCadence(el) {
+  document.querySelectorAll('.create-cadence-opt').forEach(o => o.classList.remove('sel'));
+  el.classList.add('sel');
+  createCadence = el.dataset.val;
+}
+
+function addIdentifierField() {
+  if (identifierFieldCount >= 3) return;
+  const placeholders = ['e.g., Brand', 'e.g., Model', 'e.g., Colorway'];
+  identifierFieldCount++;
+  document.getElementById('identifierFields').insertAdjacentHTML('beforeend', `
+    <div class="create-field-row">
+      <div class="create-field-num">${identifierFieldCount}</div>
+      <input class="create-field-input" type="text" placeholder="${placeholders[identifierFieldCount-1] || 'Field name'}" id="cfield${identifierFieldCount-1}" maxlength="24">
+    </div>`);
+  if (identifierFieldCount >= 3) document.getElementById('addFieldBtn').style.display = 'none';
+}
+
+function submitCreateList() {
+  const name = document.getElementById('createListName').value.trim();
+  if (!name) { showToast('Enter a name first'); return; }
+
+  const isGroup = createListType === 'group';
+  const key = name; // use name as key (simple for prototype)
+
+  // Build identifier fields
+  const fields = [];
+  for (let i = 0; i < identifierFieldCount; i++) {
+    const f = document.getElementById('cfield' + i);
+    if (f && f.value.trim()) fields.push(f.value.trim());
+  }
+
+  // Register in DATA
+  DATA[key] = {
+    listType: isGroup ? 'group' : 'personal',
+    hasGeo: false,
+    icon: isGroup ? 'ti-users' : 'ti-list',
+    color: '#656B59',
+    action: 'View entry',
+    custom: true,
+    isGroup,
+    cadence: createCadence,
+    fields: fields.length ? fields : ['Name'],
+    entries: [],
+  };
+
+  // Init state
+  listState[key] = { top: [], queue: [], submitted: false, postOn: false };
+  submitted[key] = false;
+
+  // Add to dropdown under My Lists group
+  const firstGroup = document.querySelector('#listDropdown .lh-opt-group');
+  if (firstGroup && !document.getElementById('lopt-' + key.replace(/ /g,'_'))) {
+    const opt = document.createElement('div');
+    opt.className = 'lh-opt';
+    opt.id = 'lopt-' + key.replace(/ /g,'_');
+    opt.innerHTML = `${isGroup ? '<span style="font-size:10px;">👥</span> ' : ''}${name}<span class="group-badge">${isGroup ? 'group' : 'custom'}</span> <span class="lh-opt-ct">just created</span>`;
+    opt.onclick = isGroup ? () => { openGroupHome(key); } : () => { switchList(key); };
+    firstGroup.after(opt);
+  }
+
+  showToast((isGroup ? '👥 Group' : 'List') + ' created: ' + name);
+  switchList(key);
+  goTo('lists');
+}
+
+(function init() {
+  // Check if user already registered
+  const user = localStorage.getItem('pf_user');
+  if (user) {
+    try {
+      const u = JSON.parse(user);
+      enterApp(u.name || 'User');
+    } catch(e) { /* start from onboarding */ }
+  }
+  // Start vote day countdown in background
+  vdInterval = setInterval(tickCountdown, 1000);
+  updateNotifStrip();
+})();
+</script>
+</body>
+</html>

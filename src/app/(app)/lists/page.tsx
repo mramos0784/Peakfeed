@@ -1,11 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+// Auth is enforced once by the shared (app)/layout.tsx, not re-checked here.
 export default async function ListsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const { data: lists } = await supabase
     .from("lists")
@@ -14,13 +12,8 @@ export default async function ListsPage() {
     .order("name");
 
   return (
-    <div className="min-h-dvh p-6 max-w-md mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-3xl" style={{ color: "var(--rust)" }}>MY LISTS</h1>
-        <form action="/api/auth/signout" method="post">
-          <button className="text-xs opacity-50 underline">Log out</button>
-        </form>
-      </div>
+    <div className="p-6 max-w-md mx-auto">
+      <h1 className="font-display text-3xl mb-6" style={{ color: "var(--rust)" }}>MY LISTS</h1>
       <div className="space-y-2">
         {(lists ?? []).map((list) => (
           <Link
