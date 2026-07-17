@@ -112,3 +112,212 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
+
+/* ── WAITLIST HOMEPAGE (logged-out /) ── */
+.wl-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.wl-hero {
+  background: var(--rust);
+  padding: 56px 24px 40px;
+  text-align: center;
+  position: relative;
+}
+.wl-login-link {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 11px;
+  color: var(--mist-dark);
+  text-decoration: none;
+  opacity: 0.7;
+}
+.wl-login-link:hover {
+  opacity: 1;
+}
+.wl-logo {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 56px;
+  letter-spacing: 6px;
+  color: var(--mist);
+}
+.wl-tagline {
+  font-size: 14px;
+  color: var(--mist-dark);
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.wl-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 32px 20px;
+}
+@media (max-width: 640px) {
+  .wl-steps {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+.wl-step {
+  background: #fff;
+  border: 0.5px solid rgba(52, 73, 94, 0.08);
+  border-radius: 10px;
+  padding: 16px 14px;
+  text-align: center;
+}
+.wl-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--olive);
+  color: #fff;
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.wl-step-text {
+  font-size: 12px;
+  color: var(--slate);
+  line-height: 1.5;
+}
+
+.wl-oneliner {
+  text-align: center;
+  font-size: 14px;
+  color: var(--slate);
+  opacity: 0.75;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 24px 32px;
+}
+
+.wl-proto-section {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px 40px;
+}
+.wl-proto-frame {
+  width: 100%;
+  max-width: 390px;
+  height: 700px;
+  border-radius: 32px;
+  border: 2px solid var(--rust-deep);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  background: var(--mist-light);
+}
+@media (max-width: 480px) {
+  .wl-proto-frame {
+    height: 640px;
+    border-radius: 20px;
+  }
+}
+.wl-proto-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.wl-form-section {
+  padding: 0 20px 56px;
+}
+.wl-form-title {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 24px;
+  letter-spacing: 1px;
+  color: var(--rust);
+  text-align: center;
+  margin-bottom: 16px;
+}
+.wl-form-card {
+  background: #fff;
+  border: 0.5px solid rgba(52, 73, 94, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wl-form-done {
+  text-align: center;
+}
+.wl-input {
+  border: 0.5px solid rgba(52, 73, 94, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--slate);
+  background: #fff;
+  font-family: "DM Sans", sans-serif;
+  outline: none;
+}
+.wl-input:focus {
+  border-color: var(--rust);
+}
+
+.wl-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.wl-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 0.5px solid rgba(52, 73, 94, 0.08);
+  cursor: pointer;
+}
+.wl-check-row input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--rust);
+  flex-shrink: 0;
+}
+.wl-check-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--slate);
+}
+.wl-check-helper {
+  display: block;
+  font-size: 11px;
+  color: var(--slate);
+  opacity: 0.5;
+  margin-top: 1px;
+}
+
+.wl-error {
+  font-size: 11px;
+  color: #c0392b;
+}
+
+.wl-submit {
+  background: var(--rust);
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: var(--mist);
+  cursor: pointer;
+  margin-top: 4px;
+}
+.wl-submit:disabled {
+  background: rgba(52, 73, 94, 0.2);
+  color: var(--mist-dark);
+  cursor: default;
+}

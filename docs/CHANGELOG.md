@@ -2,6 +2,37 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-17 — Embedded prototype skips its own join screen
+
+The interactive prototype embedded on the waitlist homepage now boots
+straight into the Map screen instead of showing its own onboarding/join
+form first — no visitor should face two "join" prompts back to back. See
+the update note in `docs/adr/0002-waitlist-homepage.md`. Internal deep
+links back to that screen (Profile → Account → "Join the waitlist") still
+work; only the first-load behavior changed.
+
+## 2026-07-17 — Waitlist homepage at `/`
+
+See `docs/adr/0002-waitlist-homepage.md` for the reasoning.
+
+- `/` now branches on auth state instead of always redirecting: logged-in
+  users still redirect to `/lists` (unchanged), logged-out visitors get a
+  waitlist homepage — wordmark/tagline, a 4-step how-it-works strip, a
+  one-line description, a live embed of the interactive prototype, and a
+  waitlist form.
+- Moved `reference/peakfeed_v2.html` to `public/reference/peakfeed_v2.html`
+  so it's servable for the iframe embed — same URL path, different disk
+  location.
+- New `/api/waitlist` route: validates name/email/city/interests and
+  forwards to a Google Apps Script Web App via the server-only
+  `WAITLIST_SCRIPT_URL` env var (documented in `.env.example`, needs to be
+  set in both `.env.local` and the Vercel dashboard). Real errors surface
+  to the form, nothing fails silently.
+- `WaitlistForm` component: three interest checkboxes (not radio buttons —
+  multi-select), submit disabled until at least one is checked.
+- Small "Log in" link added to the waitlist hero so there's a way back into
+  the app without typing `/login` directly.
+
 ## 2026-07-17 — Persistent nav shell (ROADMAP item 1)
 
 Added the five-tab nav (Map / Lists / Vote Day / Feed / Profile) that

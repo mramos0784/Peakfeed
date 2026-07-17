@@ -2157,13 +2157,19 @@ function submitCreateList() {
 }
 
 (function init() {
-  // Check if user already registered
+  // Embedded on the PeakFeed waitlist page as a click-through prototype —
+  // boot straight into the app instead of the join/onboarding screen, same
+  // as if "Skip for now — explore the prototype" had already been clicked.
   const user = localStorage.getItem('pf_user');
   if (user) {
     try {
       const u = JSON.parse(user);
       enterApp(u.name || 'User');
-    } catch(e) { /* start from onboarding */ }
+    } catch(e) {
+      skipOnboard();
+    }
+  } else {
+    skipOnboard();
   }
   // Start vote day countdown in background
   vdInterval = setInterval(tickCountdown, 1000);
