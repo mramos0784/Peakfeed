@@ -16,7 +16,7 @@ export interface ParsedEntry {
   image_url: string | null;
   external_id: string | null;
   confidence: "high" | "medium" | "low";
-  source: "spotify_page" | "url_id" | "tmdb" | "ai" | "unsupported";
+  source: "spotify_page" | "url_id" | "ai" | "unsupported";
   // Set only when source is "unsupported" - a human-readable reason to show
   // instead of a pre-filled guess.
   message?: string;
@@ -133,15 +133,15 @@ function extractMetaContent(html: string, propertyOrName: string): string | null
  *   1. The Spotify track page's own meta tags - free, no API key, no OAuth,
  *      and includes a dedicated artist field (music:musician_description),
  *      unlike Spotify's oEmbed endpoint which only returns the song title.
- *   2. The TMDB API for TMDB or IMDb movie links - a real API key, returns
- *      the official title/year/poster plus the IMDB ID itself (via TMDB's
- *      external_ids or find-by-imdb-id endpoints), so it never needs to
- *      scrape imdb.com directly - useful since IMDb blocks non-browser
- *      requests outright (confirmed: 202 Accepted, empty body).
- *   3. An ID already sitting in the URL itself (Google Maps place id/cid) -
+ *   2. An ID already sitting in the URL itself (Google Maps place id/cid) -
  *      free, no network call needed beyond what already happened.
- *   4. Claude, reading the page's own title/meta tags - the fallback for
+ *   3. Claude, reading the page's own title/meta tags - the fallback for
  *      Instagram links, plain article links, anything with no clean id.
+ *
+ * No TMDB tier: TMDB's API requires a paid commercial license for this kind
+ * of use, so it's not in the mix (removed after briefly landing - see
+ * ADR 0003's update note). TMDB/IMDb links fall through to Claude like any
+ * other link until a non-commercial alternative is wired in.
  *
  * This intentionally does NOT hand dedup fully to the model. Whenever an
  * earlier step finds a real identifier, that id is what entries.external_id
@@ -180,24 +180,6 @@ export async function parseLink(url: string, hintType?: EntryType): Promise<Pars
     return aiExtract(url, hintType, spotify.id);
   }
 
-  const tmdbId = tryExtractTmdbMovieId(url);
-  if (tmdbId) {
-    const movie = await fetchTmdbMovieById(tmdbId);
-    if (movie) return tmdbMovieToEntry(movie);
-    return aiExtract(url, hintType ?? "movie", null);
-  }
-
-  const imdbId = tryExtractImdbId(url);
-  if (imdbId) {
-    const movie = await fetchTmdbMovieByImdbId(imdbId);
-    if (movie) return tmdbMovieToEntry(movie);
-    // TMDB lookup failed (no API key, rate limited, or an obscure title
-    // TMDB doesn't have) - the IMDb ID itself still came straight from the
-    // URL's own structure, so it's worth keeping as the identifier even
-    // without a title, same pattern as the Google Maps place id below.
-    return aiExtract(url, hintType ?? "movie", `imdb:${imdbId}`);
-  }
-
   const mapsId = tryExtractGoogleMapsId(url);
   if (mapsId) {
     return aiExtract(url, hintType ?? "restaurant", mapsId);
@@ -230,91 +212,6 @@ async function fetchSpotifyTrackMeta(
   } catch {
     return null;
   }
-}
-
-function tryExtractTmdbMovieId(url: string): string | null {
-  const match = url.match(/themoviedb\.org\/movie\/(\d+)/);
-  return match ? match[1] : null;
-}
-
-function tryExtractImdbId(url: string): string | null {
-  const match = url.match(/imdb\.com\/title\/(tt\d+)/i);
-  return match ? match[1] : null;
-}
-
-type TmdbMovie = {
-  id: number;
-  title: string;
-  release_date: string | null;
-  poster_path: string | null;
-  imdb_id: string | null;
-};
-
-const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
-
-// TMDB's own listing page for a movie - append_to_response pulls the linked
-// IMDB ID in the same call instead of a second request.
-async function fetchTmdbMovieById(tmdbId: string): Promise<TmdbMovie | null> {
-  const apiKey = process.env.TMDB_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids`,
-      { signal: AbortSignal.timeout(6000) }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.title) return null;
-    return {
-      id: data.id,
-      title: data.title,
-      release_date: data.release_date || null,
-      poster_path: data.poster_path || null,
-      imdb_id: data.external_ids?.imdb_id || null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// TMDB's "find" endpoint looks a movie up by its IMDb ID directly - this is
-// what lets an imdb.com link resolve without ever fetching imdb.com itself,
-// which blocks non-browser requests (confirmed: 202 Accepted, empty body).
-async function fetchTmdbMovieByImdbId(imdbId: string): Promise<TmdbMovie | null> {
-  const apiKey = process.env.TMDB_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch(
-      `https://api.themoviedb.org/3/find/${imdbId}?api_key=${apiKey}&external_source=imdb_id`,
-      { signal: AbortSignal.timeout(6000) }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const movie = data.movie_results?.[0];
-    if (!movie) return null;
-    return {
-      id: movie.id,
-      title: movie.title,
-      release_date: movie.release_date || null,
-      poster_path: movie.poster_path || null,
-      imdb_id: imdbId, // confirmed real by TMDB's own match
-    };
-  } catch {
-    return null;
-  }
-}
-
-function tmdbMovieToEntry(movie: TmdbMovie): ParsedEntry {
-  const year = movie.release_date?.slice(0, 4) || null;
-  return {
-    type: "movie",
-    title: movie.title,
-    subtitle: year,
-    image_url: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : null,
-    external_id: movie.imdb_id ? `imdb:${movie.imdb_id}` : `tmdb:${movie.id}`,
-    confidence: "high",
-    source: "tmdb",
-  };
 }
 
 function tryExtractGoogleMapsId(url: string): string | null {

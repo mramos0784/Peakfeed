@@ -2,6 +2,17 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-17 — TMDB integration removed (paid commercial license required)
+
+Shipped earlier the same day, reverted the same day. TMDB's API requires a
+paid commercial license for this kind of use — not caught before building
+against it. Removed entirely from `src/lib/parseLink.ts` (both resolution
+functions, the TMDB/IMDb URL detectors, the `tmdb` source type) rather than
+left disabled behind a missing key. `TMDB_API_KEY` removed from
+`.env.example`. TMDB/IMDb links are back to the generic AI/meta-scrape
+fallback, same as before this feature existed. A non-commercial replacement
+is planned; see the update note in `docs/adr/0003-global-add-button.md`.
+
 ## 2026-07-17 — Persistent "Add to Lists" button (Stage A)
 
 See `docs/adr/0003-global-add-button.md` for the full reasoning, including

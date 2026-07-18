@@ -121,6 +121,19 @@ deferred live-search integrations (a new direct-API integration), not
 something this session built. Tested and reported on separately — see the
 changelog entry for what pasting a real TMDB/IMDb link actually does today.
 
+## Update, 2026-07-17 — TMDB integration built, then removed
+A TMDB API integration was built to close the finding above (real IMDB-ID
+resolution for both TMDB and IMDb links, via TMDB's `/movie/{id}` and
+`/find/{imdb_id}` endpoints), tested live against real TMDB and IMDb links,
+and shipped. It was reverted the same day: **TMDB's API requires a paid
+commercial license for this kind of use**, which wasn't caught before
+building against it. Removed entirely from `parseLink.ts` rather than left
+disabled behind a missing key — the founder confirmed a different source is
+coming for this. TMDB/IMDb links are back to falling through to the generic
+AI/meta-scrape fallback, same as before this feature existed. The open
+finding above still stands; whatever replaces TMDB needs to check its
+license terms for this use case before repeating the same mistake.
+
 ## Consequences
 - The per-list add box in `ListBoard.tsx` is untouched and still fully
   functional — this is a parallel entry point, not a replacement yet, per
