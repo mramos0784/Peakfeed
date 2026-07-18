@@ -29,6 +29,55 @@ create trigger on_auth_user_created
 -- What kind of thing an entry is
 create type entry_type as enum ('song', 'restaurant', 'venue', 'movie', 'event', 'issue', 'custom');
 
+-- Four platform-specific Creator types, added for the four new Creator
+-- system lists below - one system list per platform per
+-- api-integrations-addendum.md section 2 (not a single combined "Creator"
+-- category), so each platform needs its own type: the (type, external_id)
+-- dedup index and the Add-to-Lists destination matching both key off type,
+-- and the same handle text can legitimately exist as a different person on
+-- a different platform.
+alter type entry_type add value if not exists 'x_creator';
+alter type entry_type add value if not exists 'tiktok_creator';
+alter type entry_type add value if not exists 'instagram_creator';
+alter type entry_type add value if not exists 'youtube_creator';
+
+-- How an entry's title/subtitle/external_id were actually resolved, so
+-- later features (the "Search more" web-search fallback, Wikidata
+-- enrichment, real category-API integrations as they get built) can tell a
+-- verified match apart from a broader guess instead of treating every
+-- resolved entry as equally trustworthy. See
+-- api-integrations-addendum.md section 5. Six tiers, not the three named
+-- there, because this maps onto what the resolution pipeline actually
+-- produces today (url_id, ai_guess, web_search all exist in
+-- src/lib/parseLink.ts already) plus the future tiers that document asks
+-- for (direct_api, wikidata_match) plus a manual baseline - not three
+-- different real mechanisms artificially conflated into one bucket each.
+-- Confidence is implied by the tier itself rather than stored as a
+-- separate column: a web_search-resolved entry is lower confidence than a
+-- direct_api match by definition, so a second column could only ever
+-- disagree with this one, never add real information.
+do $$ begin
+  create type resolution_provenance as enum (
+    'direct_api',     -- a real catalog API confirmed this (Spotify Web
+                       -- API, Google Places, etc.) - none exist yet,
+                       -- reserved for when they're built for real
+    'url_id',          -- a canonical id was already sitting in the shared
+                       -- URL/page itself - today's actual Spotify page
+                       -- scrape / Google Maps place_id mechanism, no API
+                       -- call and no guess, just extraction
+    'wikidata_match',  -- exact Wikidata property match (handle-property
+                       -- for creators, entity match for issues) - not
+                       -- built yet
+    'web_search',      -- Claude's web_search tool - broader and lower
+                       -- confidence by definition, built for Events
+    'ai_guess',        -- Claude reading already-fetched page content, no
+                       -- search - today's generic link fallback
+    'manual'           -- user typed or edited it with no automated
+                       -- resolution at all
+  );
+exception when duplicate_object then null;
+end $$;
+
 -- A canonical item that can live on one or more lists.
 -- external_id holds whatever real identifier we could extract (Spotify track id,
 -- Google place id/cid, etc). It's nullable: not every source hands us a clean id,
@@ -41,10 +90,25 @@ create table if not exists entries (
   image_url text,
   source_url text,
   external_id text,
+  provenance resolution_provenance,
+  -- Operational, non-descriptive data (Events' date/sources today).
   metadata jsonb not null default '{}'::jsonb,
+  -- Descriptive attributes (genre, nationality, release year, etc.) -
+  -- kept separate from metadata on purpose: metadata is "how this entry's
+  -- resolution behaves," attributes is "what this thing actually is."
+  -- Empty by default since nothing populates it yet - the async Wikidata
+  -- enrichment job (api-integrations-addendum.md section 1) is a
+  -- separate, unbuilt feature.
+  attributes jsonb not null default '{}'::jsonb,
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
+
+-- Adds provenance/attributes to an `entries` table that already exists
+-- from an earlier run of this file - `create table if not exists` doesn't
+-- add columns to a table that's already there.
+alter table entries add column if not exists provenance resolution_provenance;
+alter table entries add column if not exists attributes jsonb not null default '{}'::jsonb;
 
 -- Dedup on the real identifier when we have one. Partial index so entries
 -- without an external_id (the AI-parsed, no-clean-id cases) don't collide.
@@ -52,7 +116,8 @@ create unique index if not exists entries_type_external_id_key
   on entries (type, external_id)
   where external_id is not null;
 
--- The six system lists (plus room for personal/group lists later)
+-- The ten system lists: Songs/Restaurants/Venues/Movies/Events/Issues plus
+-- four Creator lists (plus room for personal/group lists later)
 create table if not exists lists (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
@@ -80,6 +145,22 @@ insert into lists (slug, name, type) values
   ('movies', 'Movies', 'movie'),
   ('events', 'Events', 'event'),
   ('issues', 'Issues', 'issue')
+on conflict (slug) do nothing;
+
+-- Four platform-specific Creator lists (api-integrations-addendum.md
+-- section 2) - resolves that doc's own flagged open decision: this
+-- expands launch scope beyond lists-architecture.md's original five-list
+-- recommendation (Songs/Restaurants/Venues/Events/Issues + one combined
+-- Creator category), on purpose, per the founder's explicit instruction.
+-- Default shown attributes (Name, @Handle) and the identifier pattern
+-- (platform handle + platform tag) aren't a schema concern - the platform
+-- tag is the entry's own `type`, and handle/display-name live in the
+-- existing title/subtitle columns like every other entry.
+insert into lists (slug, name, type) values
+  ('x-creator', 'X Creator', 'x_creator'),
+  ('tiktok-creator', 'TikTok Creator', 'tiktok_creator'),
+  ('instagram-creator', 'Instagram Creator', 'instagram_creator'),
+  ('youtube-creator', 'YouTube Creator', 'youtube_creator')
 on conflict (slug) do nothing;
 
 -- An entry's membership in a list (the shared queue before/while it's ranked)

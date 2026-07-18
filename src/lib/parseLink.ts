@@ -7,7 +7,14 @@ export type EntryType =
   | "movie"
   | "event"
   | "issue"
-  | "custom";
+  | "custom"
+  // Four platform-specific Creator types (schema-only so far - no
+  // resolution logic targets these yet, kept in sync with the entry_type
+  // enum in supabase/schema.sql so the two don't silently diverge).
+  | "x_creator"
+  | "tiktok_creator"
+  | "instagram_creator"
+  | "youtube_creator";
 
 export interface ParsedEntry {
   type: EntryType;
@@ -300,7 +307,7 @@ ${hintType ? `The user is adding this to their "${hintType}" list.` : "Guess whi
 
 Respond with ONLY a JSON object, no other text, matching this shape:
 {
-  "type": "song" | "restaurant" | "venue" | "movie" | "event" | "issue" | "custom",
+  "type": "song" | "restaurant" | "venue" | "movie" | "event" | "issue" | "custom" | "x_creator" | "tiktok_creator" | "instagram_creator" | "youtube_creator",
   "title": string,
   "subtitle": string | null,
   "confidence": "high" | "medium" | "low"

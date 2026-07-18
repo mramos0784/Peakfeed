@@ -2,6 +2,31 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-17 — Provenance/attributes schema, four Creator lists
+
+See `docs/adr/0005-provenance-attributes-creator-lists.md`. Schema only,
+per the founder's explicit scope for this session — nothing new writes to
+these columns yet.
+
+- Confirmed `lists.category` and the `issues` system list both already
+  existed from an earlier session — nothing to add.
+- New `resolution_provenance` enum on `entries` (`direct_api` / `url_id` /
+  `wikidata_match` / `web_search` / `ai_guess` / `manual`) — six tiers
+  instead of the addendum's three, confirmed with the founder, because
+  three would have conflated `parseLink.ts`'s existing distinct resolution
+  methods. Confidence is implied by tier, not a separate column.
+- New dedicated `entries.attributes jsonb` column for Wikidata-sourced
+  descriptive facts (genre, nationality, release year), kept separate from
+  the existing `metadata` column — founder's choice over reusing
+  `metadata`, since it already holds a different kind of thing (Events'
+  operational date/sources data).
+- Four new system lists — X Creator, TikTok Creator, Instagram Creator,
+  YouTube Creator — each with its own `entry_type` enum value, since the
+  dedup index and destination matching both key off type and the same
+  handle can belong to different people on different platforms. Resolves
+  the addendum's own flagged open decision: expands launch scope beyond
+  the original five-list recommendation, on purpose.
+
 ## 2026-07-17 — Events resolve via web search, PeakFeed Event ID reduced
 
 See `docs/adr/0004-events-web-search.md` for the full reasoning. Ticketmaster
