@@ -16,10 +16,15 @@ export interface ParsedEntry {
   image_url: string | null;
   external_id: string | null;
   confidence: "high" | "medium" | "low";
-  source: "spotify_page" | "url_id" | "ai" | "unsupported";
+  source: "spotify_page" | "url_id" | "ai" | "unsupported" | "web_search";
   // Set only when source is "unsupported" - a human-readable reason to show
   // instead of a pre-filled guess.
   message?: string;
+  // Events only, from the "web_search" path: the confirmed date (YYYY-MM-DD)
+  // and the public pages actually found, straight from the API's own search
+  // result blocks - never something the model typed into its JSON answer.
+  date?: string | null;
+  sources?: { url: string; title: string }[];
 }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -163,6 +168,15 @@ export async function parseLink(url: string, hintType?: EntryType): Promise<Pars
     };
   }
 
+  // Events have no direct-API tier (Ticketmaster/Eventbrite both ruled out -
+  // see ADR 0003's update notes) and no clean id sitting in a Facebook/venue
+  // URL the way Google Maps links carry a place id. Web search stands in for
+  // both: confirming the event and finding whatever other public listings
+  // exist for it, which get attached as sources on the entry.
+  if (hintType === "event") {
+    return webSearchExtractEvent(url, true);
+  }
+
   const spotify = tryExtractSpotify(url);
   if (spotify) {
     const meta = await fetchSpotifyTrackMeta(url);
@@ -186,6 +200,14 @@ export async function parseLink(url: string, hintType?: EntryType): Promise<Pars
   }
 
   return aiExtract(url, hintType, null);
+}
+
+// Entry point for typed free text describing an event (no link at all) -
+// the AddToListsButton's typed-text path, Events only. There's nothing to
+// fetch, so this skips straight to web search with the raw description as
+// context instead of a URL.
+export async function parseEventQuery(query: string): Promise<ParsedEntry> {
+  return webSearchExtractEvent(query, false);
 }
 
 function tryExtractSpotify(url: string): { id: string } | null {
@@ -314,5 +336,188 @@ Respond with ONLY a JSON object, no other text, matching this shape:
     external_id: resolvedId,
     confidence: finalTitle ? ((parsed.confidence as ParsedEntry["confidence"]) ?? "low") : "low",
     source: "ai",
+  };
+}
+
+// Strips an event name down to a comparable form: lowercase, punctuation
+// gone, whitespace collapsed. Used both to build the dedup key below and to
+// compare two differently-worded shares of the same event (see tokenOverlap).
+export function normalizeEventName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Jaccard-style token overlap between two event names - the free, local,
+// "Tier 2" fuzzy match intelligence-layer.md describes, used at insert time
+// to catch two independently-worded shares of the same real event (a
+// Facebook page's title rarely matches an Eventbrite listing's title
+// character-for-character, even for the identical show).
+export function tokenOverlap(a: string, b: string): number {
+  const tokenize = (s: string) => new Set(normalizeEventName(s).split(" ").filter(Boolean));
+  const setA = tokenize(a);
+  const setB = tokenize(b);
+  if (setA.size === 0 || setB.size === 0) return 0;
+  let shared = 0;
+  for (const tok of setA) if (setB.has(tok)) shared++;
+  return shared / Math.max(setA.size, setB.size);
+}
+
+const EVENT_SEARCH_MAX_USES = 5;
+
+// Events have no direct-API resolution tier (see the note in parseLink), so
+// this is the whole path: hand Claude either the pasted link or the user's
+// own description, let it use real web search to confirm the event and find
+// other public listings for it, then read the actual result URLs back out of
+// the API response - never trust a URL the model might type into its JSON
+// answer, since that's exactly the kind of plausible-but-wrong string the
+// low-information-title guard elsewhere in this file exists to catch.
+async function webSearchExtractEvent(input: string, isUrl: boolean): Promise<ParsedEntry> {
+  const context = isUrl
+    ? `A user shared this link with PeakFeed, a community ranking app, as an event: ${input}`
+    : `A user described this event to PeakFeed, a community ranking app, in their own words: "${input}"`;
+
+  const prompt = `${context}
+
+Use web search to confirm the real-world event this refers to, and find other
+public listing pages for it if they exist (a Facebook Events page, an
+Eventbrite listing, the venue's own site, local news coverage). Assume the
+Tampa Bay, Florida area unless the input clearly says otherwise.
+
+After searching, respond with ONLY a JSON object as your final message, no
+other text, matching this shape:
+{
+  "title": string,
+  "venue": string | null,
+  "date": string | null,
+  "confidence": "high" | "medium" | "low"
+}
+Treat "is this a real, identifiable event" and "what's the exact date" as
+separate questions. Fill in "title" (and "venue" if you found one) whenever
+the search results confirm this is a genuine event, even if you're not
+fully certain of the single exact date - give your best title based on what
+you found either way. "date" must be YYYY-MM-DD, or null specifically if
+the date itself isn't confirmable (a multi-day event, conflicting sources,
+still TBD) - that's a reason to leave "date" null, not "title" empty.
+Only set "title" to "" if the search results show no evidence this event
+exists at all.`;
+
+  let message;
+  try {
+    message = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      // A multi-search tool-use turn needs real headroom: the model's own
+      // interstitial reasoning between searches plus the final JSON answer
+      // can exceed a small budget before it ever gets to respond, silently
+      // truncating the response before the JSON we actually need.
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+      tools: [
+        {
+          type: "web_search_20250305",
+          name: "web_search",
+          max_uses: EVENT_SEARCH_MAX_USES,
+          user_location: { type: "approximate", city: "Tampa", region: "Florida", country: "US" },
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("web search for event failed", err);
+    return {
+      type: "event",
+      title: "",
+      subtitle: null,
+      image_url: null,
+      external_id: null,
+      confidence: "low",
+      source: "web_search",
+      date: null,
+      sources: [],
+    };
+  }
+
+  // Source pages Claude actually found, read straight from the API's own
+  // search result blocks, not from anything the model typed into its JSON.
+  const sources: { url: string; title: string }[] = [];
+  for (const block of message.content) {
+    if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+      for (const result of block.content) {
+        if (result.type === "web_search_result") {
+          sources.push({ url: result.url, title: result.title });
+        }
+      }
+    }
+  }
+
+  const textBlocks = message.content.filter((b) => b.type === "text");
+  const lastText = textBlocks[textBlocks.length - 1]?.text ?? "{}";
+  let parsed: { title?: string; venue?: string | null; date?: string | null; confidence?: string };
+  try {
+    parsed = JSON.parse(lastText);
+  } catch {
+    // The model didn't respond with pure JSON despite instructions - try
+    // pulling a JSON object out of whatever surrounding text it added
+    // rather than giving up immediately.
+    const match = lastText.match(/\{[\s\S]*\}/);
+    try {
+      parsed = match ? JSON.parse(match[0]) : {};
+    } catch {
+      parsed = {};
+    }
+  }
+
+  if (!parsed.title && sources.length > 0) {
+    // Sources were found but no usable title came back - worth knowing
+    // whether this is the model genuinely declining or the response got
+    // cut off mid-turn (stop_reason would show "max_tokens" or
+    // "pause_turn" instead of "end_turn").
+    console.error("event web search: no title despite sources", {
+      stopReason: message.stop_reason,
+      sourceCount: sources.length,
+      lastTextPreview: lastText.slice(0, 200),
+    });
+  }
+
+  const title = parsed.title && !isLowInformationTitle(parsed.title) ? parsed.title : "";
+  if (!title) {
+    return {
+      type: "event",
+      title: "",
+      subtitle: null,
+      image_url: null,
+      external_id: null,
+      confidence: "low",
+      source: "web_search",
+      date: null,
+      sources,
+    };
+  }
+
+  const date = parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null;
+  // Reduced PeakFeed Event ID: date + normalized name only, no venue (Place
+  // ID resolution doesn't exist yet for any category) and deliberately no
+  // submitting user - baking the submitter into an exact-match dedup key
+  // would mean the same real event shared by two different people never
+  // collapses into one entry, which defeats the entire point of this
+  // identifier. Submitter provenance is already tracked structurally via
+  // entries.created_by and each list_items.added_by.
+  const externalId = date ? `event:${date}:${normalizeEventName(title)}` : null;
+  const subtitle = [parsed.venue, date].filter(Boolean).join(" · ") || null;
+
+  return {
+    type: "event",
+    title,
+    subtitle,
+    image_url: null,
+    external_id: externalId,
+    // Always low - web-search-sourced results are never as trustworthy as a
+    // direct API match, regardless of how confident Claude's own JSON claims
+    // to be.
+    confidence: "low",
+    source: "web_search",
+    date,
+    sources,
   };
 }

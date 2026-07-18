@@ -2,6 +2,50 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-17 — Events resolve via web search, PeakFeed Event ID reduced
+
+See `docs/adr/0004-events-web-search.md` for the full reasoning. Ticketmaster
+and Eventbrite were both investigated and dropped (licensing ambiguity for
+Ticketmaster, Eventbrite's public search API has been gone since 2020) —
+see the prior changelog entries below for that research.
+
+- `src/lib/parseLink.ts`: new `webSearchExtractEvent()` using Claude's real
+  `web_search_20250305` tool (verified live, $10/1,000 searches + tokens,
+  no separate key). Required upgrading `@anthropic-ai/sdk` 0.32.1 → 0.112.3.
+  Source URLs are read from the API's own result blocks, never trusted from
+  the model's JSON output. Confidence always forced to `"low"`.
+- Typed-text resolution now exists for Events specifically (link or
+  freeform description), gated to when the Add-to-Lists button was opened
+  from the Events list — every other category is unchanged, still shows
+  the "coming soon" message for typed input.
+- PeakFeed Event ID reduced to `event:{date}:{normalized name}` — no venue
+  Place ID (no live Google Places integration exists yet, for any
+  category) and, after confirming with the founder, no submitting-user
+  component in the dedup key itself (that would have prevented cross-user
+  dedup entirely — provenance is tracked via `entries.created_by` and
+  `list_items.added_by` instead, which already existed).
+- New same-date fuzzy name-match dedup in `/api/entries` (`tokenOverlap()`,
+  free/local, exported from `parseLink.ts`) runs before the exact
+  `external_id` match — this is what makes "multiple sources collapse into
+  one Event ID" actually true, since two different sources rarely phrase
+  an event's title identically. No schema or RLS change needed.
+- Found sources persist to `entries.metadata` (existing jsonb column, no
+  migration). Not surfaced in any UI yet — "See sources" doesn't exist
+  anywhere in the real app; storing now, building that view is separate,
+  confirmed scope.
+- **Bug found and fixed during live verification:** `max_tokens: 1024` was
+  silently truncating the model's response before it reached the final
+  JSON on every real multi-search query, always falling back to an empty
+  title even when strong evidence was found (confirmed via inspecting real
+  API responses — genuine sources every time, just no title). Raised to
+  4096 (matches Anthropic's own multi-search example) and prompt now
+  decouples "is this a real event" from "what's the exact date," so date
+  ambiguity alone doesn't blank the title too. Retested clean after the
+  fix. See the ADR for the full root-cause writeup. The fuzzy dedup path
+  itself was verified by code review and build/lint only, not a live
+  two-submission collapse test — flagged as worth checking before this is
+  in front of real users.
+
 ## 2026-07-17 — TMDB integration removed (paid commercial license required)
 
 Shipped earlier the same day, reverted the same day. TMDB's API requires a

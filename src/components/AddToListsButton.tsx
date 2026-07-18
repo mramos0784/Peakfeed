@@ -13,8 +13,10 @@ type ParsedResult = {
   image_url: string | null;
   external_id: string | null;
   confidence: "high" | "medium" | "low";
-  source: "spotify_page" | "url_id" | "ai" | "unsupported";
+  source: "spotify_page" | "url_id" | "ai" | "unsupported" | "web_search";
   message?: string;
+  date?: string | null;
+  sources?: { url: string; title: string }[];
 };
 
 type Step = "input" | "typed-unsupported" | "parsing" | "confirm" | "saving" | "done" | "error";
@@ -36,7 +38,8 @@ function normalizeUrl(input: string): string {
 // from Map, the Lists index, and any individual list - separate from the
 // per-list add box, which stays in place until this is confirmed working.
 // See docs/adr/0003-global-add-button.md for why this is scoped the way it
-// is (no live search / LLM-search / group-list destinations yet).
+// is (no live search / group-list destinations yet, except Events - see
+// docs/adr/0004-events-web-search.md).
 export default function AddToListsButton({
   systemLists,
   listContext,
@@ -71,32 +74,22 @@ export default function AddToListsButton({
     reset();
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed) return;
-
-    if (!looksLikeUrl(trimmed)) {
-      setStep("typed-unsupported");
-      return;
-    }
-
-    const url = normalizeUrl(trimmed);
+  async function resolveAndShowConfirm(body: { url?: string; query?: string; hintType?: string }) {
     setStep("parsing");
     setErrorMsg(null);
     try {
       const res = await fetch("/api/parse-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, hintType: listContext?.type }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
-        setErrorMsg(data.error ?? "Could not read that link.");
+        setErrorMsg(data.error ?? "Could not resolve that.");
         setStep("error");
         return;
       }
-      setSourceUrl(url);
+      setSourceUrl(data.sourceUrl ?? null);
       setParsed(data.parsed);
       setTitle(data.parsed.title ?? "");
       setSubtitle(data.parsed.subtitle ?? "");
@@ -108,10 +101,30 @@ export default function AddToListsButton({
     }
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = input.trim();
+    if (!trimmed) return;
+
+    if (!looksLikeUrl(trimmed)) {
+      // Typed-text resolution only exists for Events so far (web search, no
+      // direct API for any other category) - and only when we know that's
+      // what list this is for, i.e. opened from the Events list itself.
+      if (listContext?.type === "event") {
+        await resolveAndShowConfirm({ query: trimmed, hintType: "event" });
+        return;
+      }
+      setStep("typed-unsupported");
+      return;
+    }
+
+    await resolveAndShowConfirm({ url: normalizeUrl(trimmed), hintType: listContext?.type });
+  }
+
   const destination = parsed ? systemLists.find((l) => l.type === parsed.type) : undefined;
 
   async function handleConfirm() {
-    if (!parsed || !sourceUrl || !destination || !destChecked) return;
+    if (!parsed || !destination || !destChecked) return;
     setStep("saving");
     try {
       const res = await fetch("/api/entries", {
@@ -125,6 +138,8 @@ export default function AddToListsButton({
           image_url: parsed.image_url,
           source_url: sourceUrl,
           external_id: parsed.external_id,
+          date: parsed.date ?? null,
+          sources: parsed.sources ?? null,
         }),
       });
       if (!res.ok) {
@@ -174,7 +189,7 @@ export default function AddToListsButton({
                   autoFocus
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Paste a link"
+                  placeholder={listContext?.type === "event" ? "Paste a link, or describe the event" : "Paste a link"}
                   className="w-full border rounded-md px-3 py-2 text-sm mb-3"
                 />
                 <button
@@ -197,7 +212,11 @@ export default function AddToListsButton({
               </div>
             )}
 
-            {step === "parsing" && <p className="text-sm opacity-60 mt-3">Reading that link...</p>}
+            {step === "parsing" && (
+              <p className="text-sm opacity-60 mt-3">
+                {listContext?.type === "event" ? "Searching for that event..." : "Reading that link..."}
+              </p>
+            )}
 
             {step === "error" && (
               <div className="mt-3">
@@ -212,6 +231,11 @@ export default function AddToListsButton({
               <div className="mt-3">
                 {parsed.source === "unsupported" ? (
                   <p className="text-sm opacity-70 mb-3">{parsed.message}</p>
+                ) : parsed.source === "web_search" ? (
+                  <p className="text-[10px] uppercase tracking-wide opacity-50 mb-2">
+                    Found via web search &middot; {parsed.sources?.length ?? 0} source
+                    {parsed.sources?.length === 1 ? "" : "s"} &middot; low confidence, please verify
+                  </p>
                 ) : (
                   <p className="text-[10px] uppercase tracking-wide opacity-50 mb-2">
                     Confirm this entry &middot; {parsed.confidence} confidence
