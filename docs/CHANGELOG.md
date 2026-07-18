@@ -2,6 +2,42 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-17 — Multi-source search: Wikidata + web search, simultaneous
+
+See `docs/adr/0006-multi-source-search.md`. Note: the founder referenced
+"section 7" of `api-integrations-addendum.md` for this spec, but the file
+has no section 7 (goes 1/2/3/5/6, then an unlabeled table) and doesn't
+contain this two-pattern design anywhere — proceeded on the founder's
+message as authoritative, flagged rather than guessed at silently.
+
+- New: typed-text search for Films/Events/Issues/Creators now fires
+  Wikidata search and a generalized web search simultaneously, no gate —
+  each source populates its own section of a new results list the moment
+  it responds. Songs/Restaurants/Venues are unchanged (no structured
+  category API exists yet for either — Spotify Search and Google Places
+  Search both need real credentials not yet provisioned, confirmed with
+  the founder to defer).
+- `src/lib/wikidataSearch.ts`: `searchWikidata()` via `wbsearchentities`,
+  verified live and free/keyless before building. Scoped to Films/Events/
+  Issues — Creator matching needs an exact handle-property SPARQL match
+  per the addendum, a different mechanism not built this pass.
+- `src/lib/parseLink.ts`: new `webSearchCandidates()`, distinct from the
+  existing `webSearchExtractEvent` — enumerates up to 5 candidates for an
+  ambiguous typed query instead of converging on one answer.
+- New `/api/search/wikidata` and `/api/search/web` routes, called in
+  parallel from the client (two ordinary fetches, no streaming
+  infrastructure) so a slow source never blocks a fast one.
+- `AddToListsButton.tsx` reworked around a unified `PendingEntry` shape so
+  the confirm step works identically whether it came from a single-link
+  resolution or a selected search candidate. Soft-bias sort (list-context
+  matches first, nothing excluded). Every result shows a category badge
+  and a provenance badge.
+- **Closes the ADR 0005 gap**: `entries.provenance` now actually gets
+  written. `/api/parse-link` maps every resolution's internal `source` to
+  a persisted `provenance` value; `/api/entries` saves it — covers this
+  new search path and the pre-existing single-link-resolve path in the
+  same change.
+
 ## 2026-07-17 — Provenance/attributes schema, four Creator lists
 
 See `docs/adr/0005-provenance-attributes-creator-lists.md`. Schema only,

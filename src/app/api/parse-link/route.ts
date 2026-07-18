@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { parseLink, parseEventQuery, type EntryType } from "@/lib/parseLink";
+import { parseLink, parseEventQuery, sourceToProvenance, type EntryType } from "@/lib/parseLink";
 
 // Step 1 of adding something to a list: parse the shared URL (or, for
 // Events only, a typed free-text description with no link at all) into
@@ -29,11 +29,11 @@ export async function POST(request: Request) {
         );
       }
       const parsed = await parseEventQuery(query);
-      return NextResponse.json({ parsed, sourceUrl: null });
+      return NextResponse.json({ parsed, sourceUrl: null, provenance: sourceToProvenance(parsed.source) });
     }
 
     const parsed = await parseLink(url!, hintType);
-    return NextResponse.json({ parsed, sourceUrl: url });
+    return NextResponse.json({ parsed, sourceUrl: url, provenance: sourceToProvenance(parsed.source) });
   } catch (err) {
     console.error("parse-link failed", err);
     return NextResponse.json({ error: "Could not read that link" }, { status: 422 });

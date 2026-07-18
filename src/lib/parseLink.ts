@@ -34,6 +34,145 @@ export interface ParsedEntry {
   sources?: { url: string; title: string }[];
 }
 
+// Matches the resolution_provenance enum in supabase/schema.sql (ADR 0005).
+// Kept as its own type rather than reusing ParsedEntry["source"] - source
+// is the resolution *pipeline's* internal vocabulary (spotify_page, ai,
+// etc.), provenance is what actually gets persisted to entries and shown
+// to users, and the two aren't quite the same shape (e.g. "unsupported"
+// is a source but never a provenance, since nothing gets created from it).
+export type ResolutionProvenance =
+  | "direct_api"
+  | "url_id"
+  | "wikidata_match"
+  | "web_search"
+  | "ai_guess"
+  | "manual";
+
+// The one place that maps a ParsedEntry's internal `source` to the
+// persisted `provenance` value - keeps every save path (single-link
+// resolve, multi-candidate search) consistent instead of each caller
+// inventing its own mapping.
+export function sourceToProvenance(source: ParsedEntry["source"]): ResolutionProvenance | null {
+  switch (source) {
+    case "spotify_page":
+    case "url_id":
+      return "url_id";
+    case "ai":
+      return "ai_guess";
+    case "web_search":
+      return "web_search";
+    case "unsupported":
+      return null; // nothing is ever created from this source
+  }
+}
+
+// One normalized candidate from a multi-result search - the shape both
+// /api/search/wikidata and /api/search/web return, so the client can
+// merge and render them identically regardless of source.
+export type SearchCandidate = {
+  category: EntryType;
+  title: string;
+  subtitle: string | null;
+  image_url: string | null;
+  external_id: string | null;
+  provenance: ResolutionProvenance;
+  sourceLabel: string;
+};
+
+const CATEGORY_LABELS: Partial<Record<EntryType, string>> = {
+  movie: "Movies",
+  event: "Events",
+  issue: "Issues",
+  x_creator: "X Creator",
+  tiktok_creator: "TikTok Creator",
+  instagram_creator: "Instagram Creator",
+  youtube_creator: "YouTube Creator",
+};
+
+const CANDIDATE_SEARCH_MAX_USES = 5;
+
+/**
+ * Web search, but enumerating several candidates instead of converging on
+ * one answer - distinct from webSearchExtractEvent, which is for a
+ * specific pasted link/description the user already disambiguated. This is
+ * for a typed, possibly-ambiguous search query where the user still needs
+ * to pick from multiple results. Used for the simultaneous Wikidata +
+ * web-search flow (Films/Events/Issues/Creators) - see docs/adr/0006.
+ */
+export async function webSearchCandidates(query: string, category: EntryType): Promise<SearchCandidate[]> {
+  const categoryLabel = CATEGORY_LABELS[category] ?? category;
+  const prompt = `A user is searching PeakFeed, a community ranking app, for a
+"${categoryLabel}" entry matching: "${query}"
+
+Use web search to find up to 5 real, distinct candidates that could match
+this search - not just your single best guess, several plausible matches
+if more than one genuinely exists (e.g. a film and its remake, two public
+figures with a similar name). Assume the Tampa Bay, Florida area for
+anything locally ambiguous, unless the query clearly says otherwise.
+
+After searching, respond with ONLY a JSON array as your final message, no
+other text, matching this shape:
+[
+  { "title": string, "subtitle": string | null }
+]
+Only include real things you found evidence for via search - fewer than 5
+is fine, and an empty array [] is the right answer if nothing plausible
+turns up.`;
+
+  let message;
+  try {
+    message = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+      tools: [
+        {
+          type: "web_search_20250305",
+          name: "web_search",
+          max_uses: CANDIDATE_SEARCH_MAX_USES,
+          user_location: { type: "approximate", city: "Tampa", region: "Florida", country: "US" },
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("web search candidates failed", err);
+    return [];
+  }
+
+  const textBlocks = message.content.filter((b) => b.type === "text");
+  const lastText = textBlocks[textBlocks.length - 1]?.text ?? "[]";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(lastText);
+  } catch {
+    const match = lastText.match(/\[[\s\S]*\]/);
+    try {
+      parsed = match ? JSON.parse(match[0]) : [];
+    } catch {
+      parsed = [];
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    console.error("web search candidates: response wasn't a JSON array", {
+      stopReason: message.stop_reason,
+      lastTextPreview: lastText.slice(0, 200),
+    });
+    return [];
+  }
+
+  return (parsed as { title?: string; subtitle?: string | null }[])
+    .filter((c) => c.title && !isLowInformationTitle(c.title))
+    .map((c) => ({
+      category,
+      title: c.title as string,
+      subtitle: c.subtitle ?? null,
+      image_url: null,
+      external_id: null,
+      provenance: "web_search" as const,
+      sourceLabel: "Web search",
+    }));
+}
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Counterintuitively, identifying as a bot gets the real, pre-rendered page

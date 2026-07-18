@@ -28,7 +28,9 @@ lets the 5 authenticated tabs share one layout without `/login` and
 |---|---|
 | `api/auth/signout` | POST, signs out and redirects to `/login` |
 | `api/entries` | POST, creates an `entries` row + `list_items` row after a parsed link is confirmed |
-| `api/parse-link` | POST, resolves a pasted URL via `src/lib/parseLink.ts` (Spotify/Places pattern match, falls back to Claude via `/api/parse-link`) |
+| `api/parse-link` | POST, resolves a pasted URL (or, Events only, a typed description) via `src/lib/parseLink.ts`. Response includes `provenance`, mapped server-side from the resolution's internal `source` |
+| `api/search/wikidata` | POST `{query, category}`, fuzzy name search via `src/lib/wikidataSearch.ts` — Films/Events/Issues only, returns `{candidates: []}` for other categories |
+| `api/search/web` | POST `{query, category}`, multi-candidate web search via `parseLink.ts`'s `webSearchCandidates()` — up to 5 results, not converged to one answer |
 | `api/vote` | POST, writes the signed-in user's ranked order to `votes` for the current week |
 | `api/waitlist` | POST, no auth. Validates name/email/city/interests, forwards to the Google Apps Script Web App at `WAITLIST_SCRIPT_URL` (server-only env var, never sent to the client) |
 
@@ -36,7 +38,7 @@ lets the 5 authenticated tabs share one layout without `/login` and
 
 | File | Purpose |
 |---|---|
-| `AddToListsButton.tsx` | Client component: persistent floating "+" button (Map, Lists index, list detail pages) opening the global add flow — paste-link only today, see ADR 0003 for staged scope |
+| `AddToListsButton.tsx` | Client component: persistent floating "+" button (Map, Lists index, list detail pages) opening the global add flow. Paste-link works for every category; typed text triggers simultaneous Wikidata + web search for Films/Events/Issues/Creators (ADR 0006), still "coming soon" for Songs/Restaurants/Venues. Selection and single-link resolution both funnel into one unified confirm step |
 | `AppShell.tsx` | Client component: persistent rust header + bottom nav bar, active-tab highlighting, live dot on Vote Day during vote weekend |
 | `ComingSoon.tsx` | Shared placeholder for nav tabs with no backend yet (Map, Vote Day, Feed) |
 | `ListBoard.tsx` | Client component: the actual Lists-screen functionality — paste-link parse/confirm, personal ranking, vote submission, community ranking display. Per-list add box, kept in parallel with `AddToListsButton` until that's confirmed working |
@@ -48,7 +50,8 @@ lets the 5 authenticated tabs share one layout without `/login` and
 |---|---|
 | `supabase/client.ts` | Browser-side Supabase client (anon key, RLS-gated) |
 | `supabase/server.ts` | Server-side Supabase client (Server Components/Route Handlers, cookie-backed session) |
-| `parseLink.ts` | Share-ingestion resolution: pattern-matches Spotify/Google Maps URLs first, escalates to the Anthropic API server-side only when no clean pattern matches. Short-circuits known-unsupported sources (Amazon Music, share.google) and filters bot-block/interstitial titles before they'd otherwise be presented as a guess |
+| `parseLink.ts` | Share-ingestion resolution: pattern-matches Spotify/Google Maps URLs first, escalates to the Anthropic API server-side only when no clean pattern matches. Short-circuits known-unsupported sources (Amazon Music, share.google) and filters bot-block/interstitial titles before they'd otherwise be presented as a guess. Also exports `webSearchCandidates()` (multi-result search, distinct from the single-answer `webSearchExtractEvent`) and `sourceToProvenance()` (maps internal resolution `source` to the persisted `ResolutionProvenance` enum) |
+| `wikidataSearch.ts` | `searchWikidata()` — fuzzy name search via Wikidata's `wbsearchentities` action, free/keyless. Films/Events/Issues only; Creator matching needs a different mechanism (exact handle-property SPARQL match) not built yet |
 | `systemLists.ts` | `getSystemLists()` — the live system-list set from the `lists` table, shared by `AddToListsButton` and the Lists pages instead of each querying it separately |
 | `voteWeek.ts` | `currentWeekOf()` — which Monday a vote counts toward. `isVoteWeekend()` — real date math (America/New_York) for the Friday-8pm-through-Sunday window the nav's live dot uses |
 

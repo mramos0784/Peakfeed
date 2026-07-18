@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const body = await request.json();
-  const { listSlug, type, title, subtitle, image_url, source_url, external_id, date, sources } = body;
+  const { listSlug, type, title, subtitle, image_url, source_url, external_id, date, sources, provenance } = body;
 
   const { data: list, error: listError } = await supabase
     .from("lists")
@@ -68,6 +68,11 @@ export async function POST(request: Request) {
         image_url,
         source_url,
         external_id: external_id ?? null,
+        // Closes the ADR 0005 gap: nothing wrote this column until the
+        // multi-source search feature made a real provenance value
+        // available on every save path, single-link resolve included
+        // (mapped server-side in /api/parse-link via sourceToProvenance).
+        provenance: provenance ?? null,
         created_by: user.id,
         metadata: type === "event" ? { date: date ?? null, sources: sources ?? [] } : {},
       })
