@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSystemLists } from "@/lib/systemLists";
 import ListBoard from "@/components/ListBoard";
+import AddToListsButton from "@/components/AddToListsButton";
 
 // Auth is enforced once by the shared (app)/layout.tsx, not re-checked here.
 export default async function ListDetailPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -11,6 +13,8 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
 
   const { data: list } = await supabase.from("lists").select("*").eq("slug", slug).single();
   if (!list) notFound();
+
+  const systemLists = await getSystemLists(supabase);
 
   const { data: items } = await supabase
     .from("list_items")
@@ -54,10 +58,16 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
   });
 
   return (
-    <ListBoard
-      list={{ slug: list.slug, name: list.name, type: list.type }}
-      items={enrichedItems}
-      myOrder={myVotes}
-    />
+    <>
+      <ListBoard
+        list={{ slug: list.slug, name: list.name, type: list.type }}
+        items={enrichedItems}
+        myOrder={myVotes}
+      />
+      <AddToListsButton
+        systemLists={systemLists}
+        listContext={{ slug: list.slug, name: list.name, type: list.type }}
+      />
+    </>
   );
 }

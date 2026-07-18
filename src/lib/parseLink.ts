@@ -16,7 +16,10 @@ export interface ParsedEntry {
   image_url: string | null;
   external_id: string | null;
   confidence: "high" | "medium" | "low";
-  source: "spotify_page" | "url_id" | "ai";
+  source: "spotify_page" | "url_id" | "tmdb" | "ai" | "unsupported";
+  // Set only when source is "unsupported" - a human-readable reason to show
+  // instead of a pre-filled guess.
+  message?: string;
 }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -25,6 +28,85 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // with full meta tags. A real-browser UA gets Spotify's JS-only app shell
 // instead, which has none of the data we need until client-side JS runs.
 const CRAWLER_UA = "Mozilla/5.0 (compatible; PeakFeedBot/0.1; +https://peakfeed.app)";
+
+// Sources with no real metadata to scrape, ever - short-circuit before any
+// network call instead of presenting a bogus AI guess built from nothing.
+// Amazon Music has no Tier 1 path until an OAuth integration exists (see
+// share-ingestion-addendum.md); share.google is Google's own Share-button
+// shortener, it wraps a search result / knowledge panel, not the actual page.
+const UNSUPPORTED_SOURCES: { test: (host: string) => boolean; message: string }[] = [
+  {
+    test: (host) => host === "music.amazon.com" || host.endsWith(".music.amazon.com"),
+    message: "Can't auto-detect Amazon Music links yet — search below.",
+  },
+  {
+    test: (host) => host === "share.google" || host.endsWith(".share.google"),
+    message: "Can't auto-detect this one — search below.",
+  },
+];
+
+function checkUnsupportedSource(url: string): string | null {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  return UNSUPPORTED_SOURCES.find((s) => s.test(host))?.message ?? null;
+}
+
+// Exact phrases a scraped <title> or og:title sometimes comes back as when
+// the request hit an interstitial instead of the real page - login walls,
+// bot checks, loading shells, error pages. None of these are ever a real
+// title for a song/restaurant/venue/movie/event.
+const LOW_INFO_EXACT_TITLES = new Set([
+  "google search", "sign in", "sign in to continue", "log in", "login",
+  "just a moment", "just a moment...", "loading", "loading...",
+  "attention required", "access denied", "forbidden", "error",
+  "page not found", "not found", "404", "404 not found", "untitled",
+  "redirecting", "redirecting...", "please wait", "please wait...",
+  "one moment", "one moment please", "verify you are human",
+  "checking your browser", "session expired", "are you a robot",
+  "unusual traffic detected", "sorry", "oops", "forbidden access",
+]);
+
+// A short (1-2 word) title built entirely out of this vocabulary reads as
+// interstitial chrome, not a real title - "Sign In", "Access Denied". Real
+// short titles (movies, songs) are common and almost never composed only of
+// these words, so this only rejects the short, generic case, not short
+// titles in general.
+const CHROME_VOCAB = new Set([
+  "sign", "in", "log", "login", "loading", "search", "welcome", "home",
+  "verify", "verifying", "checking", "redirect", "redirecting", "error",
+  "denied", "forbidden", "expired", "wait", "moment", "robot", "human",
+  "captcha", "sorry", "oops", "unavailable", "blocked", "access", "browser",
+]);
+
+/**
+ * A generalized guard against presenting a scraped/bot-block/interstitial
+ * string as if it were a real title - broader than matching specific known
+ * phrases one at a time, since new bot-block variants show up constantly.
+ * Two checks: an exact-phrase denylist for the common cases, plus a
+ * generic-vocabulary check for short titles that are clearly chrome rather
+ * than content. Deliberately does NOT reject all short titles - "Up",
+ * "Jaws", "Barbie" are real, common, and would otherwise get wrongly
+ * flagged.
+ */
+function isLowInformationTitle(raw: string | null | undefined): boolean {
+  if (!raw) return true;
+  const trimmed = raw.trim();
+  if (!trimmed) return true;
+  const normalized = trimmed.toLowerCase().replace(/[.…\s]+$/, "");
+  if (LOW_INFO_EXACT_TITLES.has(normalized)) return true;
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length > 0 && words.length < 3) {
+    const allGeneric = words.every((w) =>
+      CHROME_VOCAB.has(w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""))
+    );
+    if (allGeneric) return true;
+  }
+  return false;
+}
 
 /**
  * Pull one meta tag's content out of raw HTML without assuming attribute
@@ -51,17 +133,36 @@ function extractMetaContent(html: string, propertyOrName: string): string | null
  *   1. The Spotify track page's own meta tags - free, no API key, no OAuth,
  *      and includes a dedicated artist field (music:musician_description),
  *      unlike Spotify's oEmbed endpoint which only returns the song title.
- *   2. An ID already sitting in the URL itself (Google Maps place id/cid) -
+ *   2. The TMDB API for TMDB or IMDb movie links - a real API key, returns
+ *      the official title/year/poster plus the IMDB ID itself (via TMDB's
+ *      external_ids or find-by-imdb-id endpoints), so it never needs to
+ *      scrape imdb.com directly - useful since IMDb blocks non-browser
+ *      requests outright (confirmed: 202 Accepted, empty body).
+ *   3. An ID already sitting in the URL itself (Google Maps place id/cid) -
  *      free, no network call needed beyond what already happened.
- *   3. Claude, reading the page's own title/meta tags - the fallback for
+ *   4. Claude, reading the page's own title/meta tags - the fallback for
  *      Instagram links, plain article links, anything with no clean id.
  *
- * This intentionally does NOT hand dedup fully to the model. Whenever step 1
- * or 2 finds a real identifier, that id is what entries.external_id gets set
- * to, and the database's unique index does exact-match dedup on it. Claude
- * only fills in the fields for the messy cases where no id exists at all.
+ * This intentionally does NOT hand dedup fully to the model. Whenever an
+ * earlier step finds a real identifier, that id is what entries.external_id
+ * gets set to, and the database's unique index does exact-match dedup on it.
+ * Claude only fills in the fields for the messy cases where no id exists.
  */
 export async function parseLink(url: string, hintType?: EntryType): Promise<ParsedEntry> {
+  const unsupportedMessage = checkUnsupportedSource(url);
+  if (unsupportedMessage) {
+    return {
+      type: hintType ?? "custom",
+      title: "",
+      subtitle: null,
+      image_url: null,
+      external_id: null,
+      confidence: "low",
+      source: "unsupported",
+      message: unsupportedMessage,
+    };
+  }
+
   const spotify = tryExtractSpotify(url);
   if (spotify) {
     const meta = await fetchSpotifyTrackMeta(url);
@@ -77,6 +178,24 @@ export async function parseLink(url: string, hintType?: EntryType): Promise<Pars
       };
     }
     return aiExtract(url, hintType, spotify.id);
+  }
+
+  const tmdbId = tryExtractTmdbMovieId(url);
+  if (tmdbId) {
+    const movie = await fetchTmdbMovieById(tmdbId);
+    if (movie) return tmdbMovieToEntry(movie);
+    return aiExtract(url, hintType ?? "movie", null);
+  }
+
+  const imdbId = tryExtractImdbId(url);
+  if (imdbId) {
+    const movie = await fetchTmdbMovieByImdbId(imdbId);
+    if (movie) return tmdbMovieToEntry(movie);
+    // TMDB lookup failed (no API key, rate limited, or an obscure title
+    // TMDB doesn't have) - the IMDb ID itself still came straight from the
+    // URL's own structure, so it's worth keeping as the identifier even
+    // without a title, same pattern as the Google Maps place id below.
+    return aiExtract(url, hintType ?? "movie", `imdb:${imdbId}`);
   }
 
   const mapsId = tryExtractGoogleMapsId(url);
@@ -106,11 +225,96 @@ async function fetchSpotifyTrackMeta(
     const title = extractMetaContent(html, "og:title");
     const artist = extractMetaContent(html, "music:musician_description");
     const image = extractMetaContent(html, "og:image");
-    if (!title) return null;
+    if (!title || isLowInformationTitle(title)) return null;
     return { title, artist: artist ?? "Unknown artist", thumbnail_url: image };
   } catch {
     return null;
   }
+}
+
+function tryExtractTmdbMovieId(url: string): string | null {
+  const match = url.match(/themoviedb\.org\/movie\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+function tryExtractImdbId(url: string): string | null {
+  const match = url.match(/imdb\.com\/title\/(tt\d+)/i);
+  return match ? match[1] : null;
+}
+
+type TmdbMovie = {
+  id: number;
+  title: string;
+  release_date: string | null;
+  poster_path: string | null;
+  imdb_id: string | null;
+};
+
+const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
+
+// TMDB's own listing page for a movie - append_to_response pulls the linked
+// IMDB ID in the same call instead of a second request.
+async function fetchTmdbMovieById(tmdbId: string): Promise<TmdbMovie | null> {
+  const apiKey = process.env.TMDB_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.title) return null;
+    return {
+      id: data.id,
+      title: data.title,
+      release_date: data.release_date || null,
+      poster_path: data.poster_path || null,
+      imdb_id: data.external_ids?.imdb_id || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// TMDB's "find" endpoint looks a movie up by its IMDb ID directly - this is
+// what lets an imdb.com link resolve without ever fetching imdb.com itself,
+// which blocks non-browser requests (confirmed: 202 Accepted, empty body).
+async function fetchTmdbMovieByImdbId(imdbId: string): Promise<TmdbMovie | null> {
+  const apiKey = process.env.TMDB_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(
+      `https://api.themoviedb.org/3/find/${imdbId}?api_key=${apiKey}&external_source=imdb_id`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const movie = data.movie_results?.[0];
+    if (!movie) return null;
+    return {
+      id: movie.id,
+      title: movie.title,
+      release_date: movie.release_date || null,
+      poster_path: movie.poster_path || null,
+      imdb_id: imdbId, // confirmed real by TMDB's own match
+    };
+  } catch {
+    return null;
+  }
+}
+
+function tmdbMovieToEntry(movie: TmdbMovie): ParsedEntry {
+  const year = movie.release_date?.slice(0, 4) || null;
+  return {
+    type: "movie",
+    title: movie.title,
+    subtitle: year,
+    image_url: movie.poster_path ? `${TMDB_IMAGE_BASE}${movie.poster_path}` : null,
+    external_id: movie.imdb_id ? `imdb:${movie.imdb_id}` : `tmdb:${movie.id}`,
+    confidence: "high",
+    source: "tmdb",
+  };
 }
 
 function tryExtractGoogleMapsId(url: string): string | null {
@@ -142,9 +346,13 @@ async function fetchPageMeta(url: string): Promise<{
     });
     const html = (await res.text()).slice(0, 50_000); // cap what we read
     const titleTag = html.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
+    const rawTitle = extractMetaContent(html, "og:title") ?? titleTag;
     return {
       finalUrl: res.url || url,
-      title: extractMetaContent(html, "og:title") ?? titleTag,
+      // A bot-block/login/interstitial page has no real title, so treat it
+      // the same as no title at all rather than passing it downstream -
+      // both as a fallback value and as context in the AI prompt below.
+      title: rawTitle && !isLowInformationTitle(rawTitle) ? rawTitle : null,
       description:
         extractMetaContent(html, "og:description") ?? extractMetaContent(html, "description"),
       image: extractMetaContent(html, "og:image"),
@@ -193,13 +401,21 @@ Respond with ONLY a JSON object, no other text, matching this shape:
     parsed = {};
   }
 
+  // Claude can only repeat back what the prompt gave it, so a bad scrape can
+  // still surface as a confident-looking guess. Re-check its title too
+  // rather than trusting the model to have caught it - if what's left is
+  // nothing usable, leave the field blank and force low confidence instead
+  // of inventing a placeholder like "Untitled" that reads as a real answer.
+  const aiTitle = parsed.title && !isLowInformationTitle(parsed.title) ? parsed.title : null;
+  const finalTitle = aiTitle ?? meta.title ?? "";
+
   return {
     type: parsed.type ?? hintType ?? "custom",
-    title: parsed.title ?? meta.title ?? "Untitled",
+    title: finalTitle,
     subtitle: parsed.subtitle ?? null,
     image_url: meta.image,
     external_id: resolvedId,
-    confidence: (parsed.confidence as ParsedEntry["confidence"]) ?? "low",
+    confidence: finalTitle ? ((parsed.confidence as ParsedEntry["confidence"]) ?? "low") : "low",
     source: "ai",
   };
 }

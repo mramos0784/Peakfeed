@@ -86,3 +86,17 @@ achieves the same visible outcome — no visitor ever sees the join screen
 first — without touching anything downstream. Verified both paths after the
 change: fresh load goes straight to Map, and the Profile deep link back to
 onboarding still works.
+
+## Update, 2026-07-17 — desktop two-column layout
+Below 1024px the page is unchanged: hero, 4-step strip, one-liner, prototype
+embed, form, stacked in that order, same CSS as originally shipped. At
+1024px and up, `.wl-page` becomes a two-column CSS grid via
+`grid-template-areas` — left column stacks hero/steps/one-liner/form (same
+DOM order, same components, same copy, no logic changes), right column is
+the prototype embed, spanning the full row height so it fills the left
+column's height (`align-self: stretch` on `.wl-proto-section`,
+`height: 100%` on `.wl-proto-frame`) rather than the fixed 700px it uses on
+mobile. Pure CSS restructuring — no JSX/component changes were needed, since
+CSS Grid's `grid-area` can re-lay-out elements without touching source
+order, which is what makes "mobile untouched, desktop restructured" possible
+without forking the markup.

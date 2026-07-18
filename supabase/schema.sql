@@ -52,23 +52,34 @@ create unique index if not exists entries_type_external_id_key
   on entries (type, external_id)
   where external_id is not null;
 
--- The five system lists (plus room for personal/group lists later)
+-- The six system lists (plus room for personal/group lists later)
 create table if not exists lists (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
   name text not null,
   type entry_type not null,
   list_kind text not null default 'system', -- system | personal | group
+  category text, -- music, food, film, etc. Matches a share to eligible group
+                  -- lists once those exist (see share-ingestion-addendum.md).
+                  -- Unused today: system lists don't need it, and there are
+                  -- no group lists yet to match against. Added now so the
+                  -- migration isn't a second surprise later.
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
+
+-- Adds the category column to a `lists` table that already exists from an
+-- earlier run of this file — `create table if not exists` doesn't add
+-- columns to a table that's already there.
+alter table lists add column if not exists category text;
 
 insert into lists (slug, name, type) values
   ('songs', 'Songs', 'song'),
   ('restaurants', 'Restaurants', 'restaurant'),
   ('venues', 'Venues', 'venue'),
   ('movies', 'Movies', 'movie'),
-  ('events', 'Events', 'event')
+  ('events', 'Events', 'event'),
+  ('issues', 'Issues', 'issue')
 on conflict (slug) do nothing;
 
 -- An entry's membership in a list (the shared queue before/while it's ranked)

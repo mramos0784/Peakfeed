@@ -321,3 +321,50 @@ body {
   color: var(--mist-dark);
   cursor: default;
 }
+
+/* ── WAITLIST HOMEPAGE — desktop two-column layout ──
+   Breakpoint-specific only: everything above is untouched and still governs
+   mobile/tablet, this just re-lays-out the same elements (same DOM order,
+   same copy, same form logic) into two columns at 1024px+. Left column
+   stacks hero/steps/oneliner/form; right column is the prototype embed,
+   sized to fill the left column's full height via the grid row span. */
+@media (min-width: 1024px) {
+  .wl-page {
+    max-width: 1120px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 48px;
+    grid-template-areas:
+      "hero  proto"
+      "steps proto"
+      "one   proto"
+      "form  proto";
+  }
+
+  .wl-hero { grid-area: hero; text-align: left; }
+  .wl-login-link { right: 0; }
+
+  .wl-steps {
+    grid-area: steps;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wl-oneliner {
+    grid-area: one;
+    text-align: left;
+    margin: 0;
+    max-width: none;
+  }
+
+  .wl-form-section { grid-area: form; }
+
+  .wl-proto-section {
+    grid-area: proto;
+    padding-top: 56px;
+    align-self: stretch;
+  }
+  .wl-proto-frame {
+    height: 100%;
+    max-width: 420px;
+  }
+}

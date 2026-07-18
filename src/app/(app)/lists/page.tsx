@@ -1,21 +1,18 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getSystemLists } from "@/lib/systemLists";
+import AddToListsButton from "@/components/AddToListsButton";
 
 // Auth is enforced once by the shared (app)/layout.tsx, not re-checked here.
 export default async function ListsPage() {
   const supabase = await createClient();
-
-  const { data: lists } = await supabase
-    .from("lists")
-    .select("slug, name, type")
-    .eq("list_kind", "system")
-    .order("name");
+  const lists = await getSystemLists(supabase);
 
   return (
     <div className="p-6 max-w-md mx-auto">
       <h1 className="font-display text-3xl mb-6" style={{ color: "var(--rust)" }}>MY LISTS</h1>
       <div className="space-y-2">
-        {(lists ?? []).map((list) => (
+        {lists.map((list) => (
           <Link
             key={list.slug}
             href={`/lists/${list.slug}`}
@@ -25,6 +22,7 @@ export default async function ListsPage() {
           </Link>
         ))}
       </div>
+      <AddToListsButton systemLists={lists} />
     </div>
   );
 }
