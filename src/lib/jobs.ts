@@ -17,20 +17,24 @@ export type ClaimedJob = {
 
 // Called with the requesting user's own (RLS-scoped) client, not the admin
 // client - entries get created inside a normal user request, and the RLS
-// policy on `jobs` allows any signed-in user to insert. Errors are
-// swallowed: a failed enqueue means an entry never gets a map pin, not
-// that entry creation itself should fail. "Never block on geocoding"
-// extends to "never let the queueing step block or fail the save."
+// policy on `jobs` allows any signed-in user to insert. Failures are logged,
+// never thrown: a failed enqueue means an entry never gets a map pin, not
+// that entry creation itself should fail. "Never block on geocoding" extends
+// to "never let the queueing step block or fail the save." Both failure
+// shapes are checked - the Supabase client resolves (doesn't throw) on a
+// query-level failure like an RLS rejection, it only throws on something
+// like a dropped connection, so the try/catch alone would miss the former.
 export async function enqueueJob(
   supabase: SupabaseClient,
   params: { jobType: JobType; entryId: string; payload: Record<string, unknown> }
 ): Promise<void> {
   try {
-    await supabase.from("jobs").insert({
+    const { error } = await supabase.from("jobs").insert({
       job_type: params.jobType,
       entry_id: params.entryId,
       payload: params.payload,
     });
+    if (error) console.error("enqueueJob failed", error);
   } catch (err) {
     console.error("enqueueJob failed", err);
   }
