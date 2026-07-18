@@ -2,6 +2,33 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-17 — schema.sql migration bug fix (found running it live)
+
+The founder ran the updated `schema.sql` in the Supabase SQL editor and hit
+`type "entry_type" already exists` on the very first statement — the
+original `entry_type` creation (pre-dating this session) was never wrapped
+in the idempotent-creation pattern used for this session's newer
+`resolution_provenance` type, so re-running the full file from top to
+bottom errored out before ever reaching any of the actual new migrations
+below it. Fixed by wrapping it in the same `DO $$ ... EXCEPTION WHEN
+duplicate_object THEN NULL; END $$;` block. My mistake — I applied the
+safe pattern to what I added but didn't check whether an older statement
+in the same file needed it too.
+
+**Second bug found running it live, same session:** past that point, hit
+`unsafe use of new value "x_creator" of enum type entry_type` (Postgres
+55P04) on the Creator-lists insert. `ALTER TYPE ... ADD VALUE` requires the
+new value to be committed before use elsewhere in the same transaction,
+and Supabase's SQL editor runs a pasted script as one implicit transaction
+— so the four Creator enum values (added via `ALTER TYPE ADD VALUE` to the
+already-existing `entry_type`) weren't usable yet by the time the insert
+using them ran, further down the same script. Doesn't affect `entry_type`'s
+original seven values or `resolution_provenance`'s values — both come from
+a single `CREATE TYPE` statement, which has no such restriction. Fixed
+with an explicit `COMMIT;` right after the four `ALTER TYPE ADD VALUE`
+lines, closing that transaction boundary before anything downstream tries
+to use the new values.
+
 ## 2026-07-17 — Multi-source search: Wikidata + web search, simultaneous
 
 See `docs/adr/0006-multi-source-search.md`. Note: the founder referenced

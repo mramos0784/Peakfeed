@@ -26,8 +26,15 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- What kind of thing an entry is
-create type entry_type as enum ('song', 'restaurant', 'venue', 'movie', 'event', 'issue', 'custom');
+-- What kind of thing an entry is. Wrapped for idempotency the same way
+-- resolution_provenance is below - CREATE TYPE has no native IF NOT
+-- EXISTS, so re-running this file from scratch (as opposed to running only
+-- the newer statements below it) errored here on a database that already
+-- had this type, before ever reaching any later, genuinely-new statements.
+do $$ begin
+  create type entry_type as enum ('song', 'restaurant', 'venue', 'movie', 'event', 'issue', 'custom');
+exception when duplicate_object then null;
+end $$;
 
 -- Four platform-specific Creator types, added for the four new Creator
 -- system lists below - one system list per platform per
@@ -40,6 +47,19 @@ alter type entry_type add value if not exists 'x_creator';
 alter type entry_type add value if not exists 'tiktok_creator';
 alter type entry_type add value if not exists 'instagram_creator';
 alter type entry_type add value if not exists 'youtube_creator';
+
+-- Postgres requires a value added via ALTER TYPE ... ADD VALUE to be
+-- committed before it can be used elsewhere (error 55P04, "unsafe use of
+-- new value") - and the Supabase SQL editor runs a pasted script as one
+-- implicit transaction, so the Creator-list insert further down would try
+-- to use 'x_creator' etc. before they're actually committed. This doesn't
+-- apply to entry_type's original seven values (song/restaurant/.../custom)
+-- or to resolution_provenance's values below - both come from a single
+-- CREATE TYPE statement, which has no such restriction, only values added
+-- later via ALTER TYPE ADD VALUE do. Harmless if the editor's actual
+-- behavior turns out to autocommit per statement anyway: COMMIT outside an
+-- open transaction is just a no-op warning in Postgres, not an error.
+commit;
 
 -- How an entry's title/subtitle/external_id were actually resolved, so
 -- later features (the "Search more" web-search fallback, Wikidata
