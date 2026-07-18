@@ -47,6 +47,12 @@ export default function MapView({ entries }: { entries: MapEntry[] }) {
   const [activeTypes, setActiveTypes] = useState<Set<string>>(
     new Set(["restaurant", "venue", "event"])
   );
+  // The markers effect below only reruns when `entries`/`activeTypes`
+  // change - without this, it fires once on mount (synchronously, before
+  // the async `import("leaflet")` above has created the map) and never
+  // gets a second chance, so pins silently never render on first load.
+  // Flipping this once the map actually exists gives it that second run.
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +80,7 @@ export default function MapView({ entries }: { entries: MapEntry[] }) {
         }
       ).addTo(map);
       mapRef.current = map;
+      setMapReady(true);
     });
 
     return () => {
@@ -120,7 +127,7 @@ export default function MapView({ entries }: { entries: MapEntry[] }) {
       cancelled = true;
       markers.forEach((m) => m.remove());
     };
-  }, [entries, activeTypes]);
+  }, [entries, activeTypes, mapReady]);
 
   function toggleType(type: string) {
     setActiveTypes((prev) => {
