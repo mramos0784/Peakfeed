@@ -113,6 +113,51 @@ body {
   50% { opacity: 0.25; }
 }
 
+/* ── MAP SCREEN — CARTO Positron basemap + branded controls/popups (ADR 0007) ──
+   The basemap itself is already muted (see MapView.tsx); this layer just
+   restyles Leaflet's default control chrome (zoom buttons, attribution,
+   popups) so they read as part of the app instead of stock Leaflet UI. */
+.pf-map-filters {
+  background: var(--mist-light);
+  border-bottom: 0.5px solid rgba(52, 73, 94, 0.12);
+}
+.pf-map-empty {
+  background: var(--mist-light);
+  border-top: 0.5px solid rgba(52, 73, 94, 0.12);
+}
+.leaflet-control-zoom {
+  border: none !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(37, 53, 69, 0.2) !important;
+}
+.leaflet-control-zoom a {
+  background: #fff !important;
+  color: var(--slate-deep) !important;
+  border-color: rgba(52, 73, 94, 0.1) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: var(--mist-light) !important;
+}
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.75) !important;
+  font-size: 10px !important;
+  color: var(--slate) !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(37, 53, 69, 0.22) !important;
+}
+.leaflet-popup-content {
+  font-family: "DM Sans", sans-serif !important;
+  font-size: 13px !important;
+  margin: 10px 12px !important;
+  line-height: 1.4 !important;
+}
+.leaflet-popup-tip {
+  box-shadow: 0 4px 10px rgba(37, 53, 69, 0.15) !important;
+}
+
 /* ── WAITLIST HOMEPAGE (logged-out /) ── */
 .wl-page {
   max-width: 720px;

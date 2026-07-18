@@ -98,6 +98,18 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
+-- Best-effort dedup key for Songs/Restaurants/Venues when no real external
+-- id exists (no direct catalog API is wired up for either - see
+-- docs/file-map.md). Distinct from every other tier: this is a normalized
+-- title+artist or name+city string PeakFeed computed itself, not anything
+-- verified against an external source. Added via ALTER TYPE (not part of
+-- the original CREATE TYPE above), so - same 55P04 lesson as entry_type's
+-- Creator values - nothing later in this file may use the literal value
+-- 'internal_key' before this commits. Nothing in this script does; only
+-- app code writes it, so no explicit COMMIT is required here, but flagging
+-- the reason in case a future edit adds one.
+alter type resolution_provenance add value if not exists 'internal_key';
+
 -- A canonical item that can live on one or more lists.
 -- external_id holds whatever real identifier we could extract (Spotify track id,
 -- Google place id/cid, etc). It's nullable: not every source hands us a clean id,
@@ -120,15 +132,26 @@ create table if not exists entries (
   -- enrichment job (api-integrations-addendum.md section 1) is a
   -- separate, unbuilt feature.
   attributes jsonb not null default '{}'::jsonb,
+  -- Null until a geocode job resolves it, and stays null forever if
+  -- Nominatim genuinely can't find an address - no coarser fallback, no
+  -- invented location. The Map screen's only rule is "no coordinate, no
+  -- pin," so null here is a complete, correct answer on its own, not a
+  -- "not implemented yet" placeholder. Only Restaurants/Venues/Events ever
+  -- get a geocode job enqueued - Songs/Issues/Creators have no physical
+  -- location, these two columns just stay null for them permanently.
+  latitude double precision,
+  longitude double precision,
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
 
--- Adds provenance/attributes to an `entries` table that already exists
--- from an earlier run of this file - `create table if not exists` doesn't
--- add columns to a table that's already there.
+-- Adds provenance/attributes/coordinates to an `entries` table that
+-- already exists from an earlier run of this file - `create table if not
+-- exists` doesn't add columns to a table that's already there.
 alter table entries add column if not exists provenance resolution_provenance;
 alter table entries add column if not exists attributes jsonb not null default '{}'::jsonb;
+alter table entries add column if not exists latitude double precision;
+alter table entries add column if not exists longitude double precision;
 
 -- Dedup on the real identifier when we have one. Partial index so entries
 -- without an external_id (the AI-parsed, no-clean-id cases) don't collide.
@@ -207,6 +230,49 @@ create table if not exists votes (
   unique (list_id, user_id, rank, week_of)
 );
 
+-- Generic background job queue - deliberately not geocoding-specific.
+-- job_type is what makes it reusable: the async Wikidata enrichment job
+-- api-integrations-addendum.md describes (and this codebase never built,
+-- per the status report) is the same shape of problem as geocoding -
+-- "do some slow/rate-limited work after an entry already exists, without
+-- blocking creation" - and can use this same table with job_type =
+-- 'wikidata_enrich' later instead of a second one-off queue.
+--
+-- Claiming is atomic via `update ... where status = 'pending' returning`
+-- (see src/lib/jobs.ts), which is what actually prevents two overlapping
+-- workers from processing the same row twice - not a separate global lock.
+create table if not exists jobs (
+  id uuid primary key default gen_random_uuid(),
+  job_type text not null,
+  entry_id uuid references entries(id) on delete cascade,
+  status text not null default 'pending', -- pending | in_progress | done | failed
+  attempts int not null default 0,
+  max_attempts int not null default 5,
+  next_run_at timestamptz not null default now(),
+  last_error text,
+  payload jsonb not null default '{}'::jsonb,
+  result jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists jobs_claimable_idx on jobs (job_type, status, next_run_at)
+  where status = 'pending';
+
+-- Nominatim's usage policy requires caching results, and this is also what
+-- keeps repeat lookups for the same city/address from ever re-spending the
+-- (very tight - 4 requests/minute for a recurring script, not the looser
+-- 1/second absolute ceiling) budget. Negative results are cached too
+-- (resolved = false) - a confirmed-unfindable address shouldn't get
+-- re-queried by every subsequent retry attempt.
+create table if not exists geocode_cache (
+  query_key text primary key,
+  latitude double precision,
+  longitude double precision,
+  resolved boolean not null,
+  created_at timestamptz not null default now()
+);
+
 -- Row Level Security. Everything is readable by any signed-in user (it's a
 -- public leaderboard). Writes are restricted to acting as yourself.
 alter table profiles enable row level security;
@@ -214,6 +280,8 @@ alter table entries enable row level security;
 alter table lists enable row level security;
 alter table list_items enable row level security;
 alter table votes enable row level security;
+alter table jobs enable row level security;
+alter table geocode_cache enable row level security;
 
 drop policy if exists "profiles are publicly readable" on profiles;
 create policy "profiles are publicly readable" on profiles for select using (true);
@@ -241,3 +309,13 @@ drop policy if exists "users update own votes" on votes;
 create policy "users update own votes" on votes for update using (auth.uid() = user_id);
 drop policy if exists "users delete own votes" on votes;
 create policy "users delete own votes" on votes for delete using (auth.uid() = user_id);
+
+-- jobs and geocode_cache are internal/machine-managed - no select policy
+-- for either, so a signed-in user's own (anon-key, RLS-scoped) client sees
+-- zero rows from both by default. Only the geocode cron route's
+-- service-role client (src/lib/supabase/admin.ts, which bypasses RLS
+-- entirely) ever reads or updates them. The one exception: signed-in users
+-- can insert a job row, since /api/entries enqueues geocode jobs using the
+-- requesting user's own session, not a service-role client.
+drop policy if exists "signed-in users can enqueue jobs" on jobs;
+create policy "signed-in users can enqueue jobs" on jobs for insert with check (auth.uid() is not null);

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tokenOverlap } from "@/lib/parseLink";
+import { songDedupKey, placeDedupKey } from "@/lib/normalize";
+import { enqueueJob } from "@/lib/jobs";
 
 // Step 2: the user confirmed (or edited) the parsed fields. Insert the entry
 // and attach it to the list's queue. If another user already shared the same
@@ -20,7 +22,24 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const body = await request.json();
-  const { listSlug, type, title, subtitle, image_url, source_url, external_id, date, sources, provenance } = body;
+  let { external_id, provenance } = body;
+  const { listSlug, type, title, subtitle, image_url, source_url, date, sources } = body;
+
+  // No real identifier from any resolution tier (no direct catalog API
+  // exists for Songs or Restaurants/Venues yet) - fall back to a
+  // normalized title+artist / name+city key PeakFeed computes itself, so
+  // at least some dedup happens instead of every fallback-resolved share
+  // becoming its own entry forever. Tagged with its own provenance value
+  // so this is visibly a best-effort match, not a verified external id.
+  if (!external_id) {
+    if (type === "song" && title && subtitle) {
+      external_id = `internal:song:${songDedupKey(title, subtitle)}`;
+      provenance = "internal_key";
+    } else if ((type === "restaurant" || type === "venue") && title && subtitle) {
+      external_id = `internal:${type}:${placeDedupKey(title, subtitle)}`;
+      provenance = "internal_key";
+    }
+  }
 
   const { data: list, error: listError } = await supabase
     .from("lists")
@@ -32,6 +51,7 @@ export async function POST(request: Request) {
   }
 
   let entryId: string | null = null;
+  let isNewEntry = false;
 
   if (type === "event" && date) {
     const { data: candidates } = await supabase
@@ -82,6 +102,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError?.message ?? "Insert failed" }, { status: 500 });
     }
     entryId = created.id;
+    isNewEntry = true;
+  }
+
+  // Entry creation is never blocked on geocoding - enqueue a job and move
+  // on immediately. Only for genuinely new rows: a deduped-onto-existing
+  // entry either already has a coordinate or already has a job in flight.
+  // Only Restaurants/Venues/Events have a physical location to plot.
+  if (isNewEntry && entryId) {
+    if (type === "restaurant" || type === "venue") {
+      await enqueueJob(supabase, {
+        jobType: "geocode",
+        entryId,
+        payload: { query: subtitle ? `${title}, ${subtitle}` : title },
+      });
+    } else if (type === "event") {
+      const venue = (subtitle ?? "").split(" · ")[0]?.trim();
+      // Nothing to geocode without a venue name - don't enqueue a job with
+      // no usable query, the entry just stays permanently off the map,
+      // same as a job that tried and failed.
+      if (venue) {
+        await enqueueJob(supabase, {
+          jobType: "geocode",
+          entryId,
+          payload: { query: `${venue}, Tampa, FL` },
+        });
+      }
+    }
   }
 
   const { data: listItem, error: listItemError } = await supabase

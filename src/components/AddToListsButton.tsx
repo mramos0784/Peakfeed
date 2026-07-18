@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SystemList } from "@/lib/systemLists";
+import type { ResolutionProvenance } from "@/lib/parseLink";
 
 type ListContext = { slug: string; name: string; type: string };
-
-type ResolutionProvenance = "direct_api" | "url_id" | "wikidata_match" | "web_search" | "ai_guess" | "manual";
 
 // The two independent search sources fire in parallel for these categories
 // (docs/adr/0006) - Wikidata + web search simultaneously, no gate. Every
@@ -45,6 +44,7 @@ const PROVENANCE_LABEL: Record<ResolutionProvenance, string> = {
   web_search: "Web search",
   ai_guess: "AI guess",
   manual: "Manual",
+  internal_key: "Best-effort match",
 };
 
 function looksLikeUrl(input: string): boolean {

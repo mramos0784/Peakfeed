@@ -46,7 +46,13 @@ export type ResolutionProvenance =
   | "wikidata_match"
   | "web_search"
   | "ai_guess"
-  | "manual";
+  | "manual"
+  // A normalized title+artist / name+city key PeakFeed computed itself
+  // (src/lib/normalize.ts), used only when Songs/Restaurants/Venues have
+  // no real external id to fall back on. Distinct from every other tier:
+  // this is a best-effort match, not anything verified against an
+  // external source.
+  | "internal_key";
 
 // The one place that maps a ParsedEntry's internal `source` to the
 // persisted `provenance` value - keeps every save path (single-link

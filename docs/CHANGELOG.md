@@ -2,6 +2,65 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-18 — Map screen visual pass
+
+Follow-up polish on the Map screen from ADR 0007, prompted by the stock
+Leaflet/OSM look reading as too visually busy against the brand palette.
+
+- Swapped the tile layer from stock OpenStreetMap raster tiles to CARTO's
+  free "Positron" basemap (`src/components/MapView.tsx`) — same underlying
+  OSM data, muted grey/cream rendering instead of full-color roads/labels,
+  so brand-colored pins read clearly instead of competing with the tiles.
+  Free/keyless at this volume; attribution now credits both OpenStreetMap
+  (data) and CARTO (tile rendering).
+- Restyled Leaflet's default chrome to match the brand palette instead of
+  library defaults: zoom control moved to bottom-right with a branded
+  shadow/radius, attribution strip, and popups (Bebas Neue title, DM Sans
+  body) — all in `globals.css` under `.leaflet-*` overrides plus new
+  `.pf-map-*` classes. Markers shrunk slightly (14px → 11px) and given a
+  softer shadow, filter chips now sit on `--mist-light` instead of plain
+  white to match the rest of the app shell.
+- No schema, API, or data-flow changes — display-only.
+
+## 2026-07-18 — Dedup identifiers, job queue, geocoding, real Map screen
+
+See `docs/adr/0007-dedup-geocoding-map.md` for full reasoning, the job
+table schema, and the confirmed Nominatim rate-limiting mechanism.
+
+- Two real platform constraints verified before building, not assumed:
+  Vercel Cron only supports daily schedules on the Hobby plan (confirmed
+  with the founder); Nominatim's actual limit for a recurring script is
+  4 requests/minute, stricter than the 1/sec figure initially described.
+- `src/lib/normalize.ts`: dedup keys for Songs (`title::artist`) and
+  Restaurants/Venues (`name::city`, city-level via a Tampa Bay heuristic,
+  never exact address). Entity-decoding runs first, before lowercasing —
+  order matters, or the earlier HTML-entity display bug becomes a silent
+  dedup bug instead. Wired into `/api/entries` as a fallback only when no
+  real external id exists, tagged with a new `internal_key` provenance
+  value (the seventh, added to `resolution_provenance`).
+- New generic `jobs` table (`src/lib/jobs.ts`) — not geocoding-specific,
+  reusable by the still-unbuilt async Wikidata enrichment job later.
+  Atomic per-row claiming (no separate lock needed). New `geocode_cache`
+  table, required by Nominatim's own usage policy and what keeps repeat
+  lookups from spending budget twice.
+- New `src/lib/supabase/admin.ts` (service-role client, cron-only, bypasses
+  RLS) and `src/lib/nominatim.ts` (cache-first geocoding, proper custom
+  User-Agent). New `/api/cron/geocode` route, paced to Nominatim's real
+  4/min limit via explicit sequential sleeps around real requests only
+  (cache hits are free and unpaced). New `SUPABASE_SERVICE_ROLE_KEY` and
+  `CRON_SECRET` env vars required, neither exists yet.
+- `entries.latitude`/`longitude` added — null until resolved, stays
+  permanently null if Nominatim confirms no match, no coarser fallback
+  ever. Entry creation never blocks on geocoding.
+- Real Map screen built (roadmap item 5, previously `ComingSoon`) —
+  vanilla Leaflet (not `react-leaflet`, sidesteps any React 19 compat
+  question), real pins only for resolved coordinates, OSM attribution via
+  Leaflet's standard tile-layer mechanism, category filter, tap-for-popup.
+  Reasonably scoped, not the full `master-product-data.md` spec — no
+  bounding-box live re-aggregation, subscribed-lists dropdown, vote-day
+  strip, or action sheet. Confirmed with the founder as in-scope for this
+  change before building it.
+
 ## 2026-07-17 — schema.sql migration bug fix (found running it live)
 
 The founder ran the updated `schema.sql` in the Supabase SQL editor and hit
