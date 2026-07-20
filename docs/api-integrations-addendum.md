@@ -102,6 +102,17 @@ that used to return in under one), which is exactly why this must stay
 async rather than live. If volume ever demands it, Wikimedia Enterprise API
 is the paid, SLA-backed alternative.
 
+**Status: still not built, and it matters more than it looked like
+earlier.** A status report on a prior session confirmed only a live,
+search-time Wikidata lookup exists (for Films/Events/Issues/Creators, the
+categories that already hit Wikidata during search), not this separate
+async, post-creation pass. Since Songs and Restaurants/Venues now resolve
+entirely through internal keys with no live Wikidata check at creation
+time at all, they have no path to Wikidata attributes whatsoever without
+this async job. Build it reusing the existing generic job queue (`jobs` +
+caching pattern already built for geocoding), don't build a second
+one-off queue.
+
 ### Confirmed dead ends — don't build, don't revisit without new information
 | Source | Why |
 |---|---|
@@ -348,6 +359,19 @@ section 2), reused as-is. Genuinely cheap to build relative to everything
 else in this doc, since no new resolution logic is needed, just a new entry
 point into logic that already exists.
 
+**Built, confirmed working, but with a real limitation to track, not a bug
+to fix now.** Both `AddToListsButton` and the new `EntryActionMenu` (built
+this session) currently pick exactly one destination via `.find()` and
+render a single, hardcoded checked checkbox, correct today since group
+lists don't exist and there's only ever one real destination. **This is
+structurally single-destination, not a data-shape extension that'll widen
+automatically.** The day group lists ship, both components need real
+rework: `.find()` → `.filter()` for an array of eligible destinations, a
+single implied-checked state → per-destination checked state, one POST →
+either a loop of POSTs or a batched endpoint. Two components need this
+upgrade, not one, don't assume fixing it in one place covers both. Flag
+this explicitly whenever group lists get scoped, don't rediscover it mid-build.
+
 ## 7. Search is cross-category, never siloed by current screen
 **Decision, and a correction to section 5's original framing:** typed
 search must not be locked to whatever category the user happened to be
@@ -520,4 +544,4 @@ real person who clicks it, different risk category, doesn't get the same
 | Attribute storage schema (JSONB column per entry vs. separate attributes table) | Not yet decided, needs resolving before Claude Code builds against it |
 | Wikidata Enterprise API vs. free public endpoint | Free endpoint for now, revisit if async enrichment volume or query-service slowness becomes a real problem |
 | "Search more" web-search fallback: what confidence/provenance labeling scheme to use, and should low-provenance entries display any visual distinction to the user later, or just exist as backend metadata? | Open |
-| Cross-category search ranking bias: does the current screen's category get a soft ranking boost, or zero influence at all? | Leaning soft bias, needs explicit confirmation |
+| Cross-category search ranking bias | **Resolved: soft bias confirmed.** Current screen's category surfaces first, other categories never excluded. |
