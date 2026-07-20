@@ -2,6 +2,43 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-20 — In-list search: structured forms, Creator handle match, Events fields, Issues tags
+
+See `docs/adr/0008-in-list-search.md` for full reasoning and live-test
+notes, including a real bug found and fixed mid-build.
+
+- New `InListSearchForm.tsx`, rendered per-list in `ListBoard.tsx`,
+  distinct from `AddToListsButton`'s global "+" flow. Named fields per
+  category instead of one free-text box: Title/Artist (Songs), Name/City
+  (Restaurants/Venues, City pre-filled from `profiles.city`), Title
+  (Movies), Name/Location/Date (Events), Handle (Creators), Section tag +
+  issue name (Issues).
+- Songs and Restaurants/Venues save directly on submit (internal-key
+  dedup, no live catalog to search) — confirmed this was already how
+  `/api/entries` behaved before building the form around it.
+- `src/lib/wikidataSearch.ts`: `searchWikidataByHandle()` — the
+  P2002/P2003/P7085/P2397 exact handle-property SPARQL match for Creators,
+  previously only documented, never implemented. First version used
+  `FILTER(LCASE(...))` for case-insensitivity and timed out (502) on every
+  real query against `query.wikidata.org` — verified live, fixed by
+  matching a `VALUES` list of case variants directly in the triple pattern
+  instead, which stays indexed.
+- `src/lib/parseLink.ts`'s `webSearchCandidates()` grew an optional
+  `{location, date}` param, used only for Events' web-search prompt —
+  Wikidata's fuzzy search has no location/date filter, so only Name feeds
+  that source; Location/Date are explicitly framed to the model as
+  disambiguating, not a strict filter.
+- Issues' closed-dropdown section tag (Politics/World/Local/.../Other,
+  with a required free-text field when "Other" is picked) now persists to
+  `entries.attributes` as two separate keys (`section_tag`,
+  `section_other_text`) — reused the existing `attributes` jsonb column
+  rather than adding new ones, since it already existed for exactly this
+  kind of descriptive field and had never been written to.
+- Live-tested all six category behaviors end-to-end against a real
+  signed-in session (throwaway test account, cleaned up after) — see the
+  ADR for the full results, including the Creator-search bug found this
+  way.
+
 ## 2026-07-18 — Map screen visual pass
 
 Follow-up polish on the Map screen from ADR 0007, prompted by the stock
