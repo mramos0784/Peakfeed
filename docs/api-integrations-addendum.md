@@ -193,6 +193,65 @@ fallback per the Intelligence Layer doc) with no external attribute
 enrichment. Wikipedia/Wikidata is an enrichment layer on top of the existing
 Issues dedup logic, not a replacement for it.
 
+### Section tag scheme: closed dropdown, plus Other
+Every Issue entry also gets a publication-style section tag, separate from
+the specific issue name itself, e.g. "Politics" as the section, "the
+redistricting fight" as the actual issue. This guarantees section-level
+rollups ("how much did Tampa care about Politics this month") stay clean
+even though the specific-issue name stays imperfectly deduped, an accepted
+tradeoff already agreed above.
+
+**Starter list (closed dropdown):** Politics, World, Local, Business,
+Science, Health, Environment, Education, Crime & Safety, Sports, Weather,
+Culture.
+
+**"Other" is a required escape hatch, not optional.** A closed list with no
+way out either forces a bad fit or blocks a real, common local issue from
+being tagged at all. Selecting "Other" reveals a free-text field.
+
+**Implementation detail that matters:** store this as two fields, not one,
+e.g. `issue_section_tag = 'other'` plus a separate `issue_section_other_text`
+field, never collapse "Other" selections into the same field as the real
+tags. If it's one flexible field, the whole point of reviewing the Other
+bucket later to decide on new categories becomes fuzzy-matching text again,
+exactly the problem the closed list exists to avoid.
+
+**This needs a human review trigger, not a "look at it eventually."** Same
+pattern as the TMDB and Vercel Pro revisit triggers elsewhere in this doc:
+review the Other bucket once there's enough real volume for a pattern to
+be visible, not on a fixed calendar date. If a specific term keeps
+recurring in Other, that's the signal to promote it to a real tag.
+
+**Open, not yet decided:** should the existing Wikidata/web-search
+enrichment for Issues auto-suggest a section tag (matching whatever
+Wikidata categorizes the topic under), with the user free to override, or
+should this always be a fully manual pick? Leaning toward auto-suggest,
+consistent with the suggest-never-silently-write pattern used everywhere
+else in this build, needs explicit confirmation before Claude Code builds
+it either way.
+
+## 9. Per-category search fields — global search vs. in-list search
+**Two different things, not one feature at different scopes.** The global
+search (opened via the "+" button on Map/Main List screens) is one
+free-text bar, forgiving and fuzzy, returning a mix of matching lists
+(system lists, public group lists) and matching items, grouped into clearly
+labeled sections (e.g. "Lists" and "Items"), never one undifferentiated
+flat list, someone searching "Songs" shouldn't have to guess whether a
+result is the list itself or a song with that word in its title.
+
+The in-list search (once inside a specific list) is a **structured form
+with named fields**, not a single text box, since the category is already
+known and the goal is precise disambiguation, not open-ended discovery.
+
+| Category | Search input fields | Displayed/identifier fields | Notes |
+|---|---|---|---|
+| Songs | Title, Artist | Same | Matches the dedup key exactly |
+| Restaurants/Venues | Name, City | Same | "City," not a precise address, matches the dedup key. Pre-fill with the user's own home city as a default |
+| Movies | Title | Title, Year, Genre | Year/Genre are display-only, not required search inputs, most people don't recall exact release years, and Wikidata title search works fine alone. Year/Genre become useful once results come back, to disambiguate two same-named films |
+| Events | Name, Location, Date | Name, Date, Location | Date is a search input, not just display, since the Event ID identifier itself includes date, and recurring event names (e.g. "Reggae Night") are hard to disambiguate without it |
+| Creators | Handle | Name, Handle | Handle is the primary input, it's the actual identifier. Name is secondary |
+| Issues | Section tag (dropdown), issue name | Section tag, issue name | See section tag scheme above |
+
 ## 5. "Search more" — web search as an explicit, user-initiated fallback
 When a user searches by name (not handle, not a clean API match) during
 search-assisted entry, and the structured search (category API, or Wikidata
@@ -283,6 +342,46 @@ tapped from the Films list specifically), that category gets a soft
 ranking bias, its results surface first, but other categories are never
 excluded. Consistent with the confidence-based pre-checking pattern used
 elsewhere in this doc, context helps, it doesn't gatekeep.
+
+## 8. Internal dedup identifiers, geocoding, and map pin resolution (built)
+Confirmed built and end-to-end tested, not just code-reviewed:
+
+**Dedup:** Songs and Restaurants/Venues moved off real Spotify/Google Places
+API integration entirely, in favor of internal normalized identifiers
+(`entries.external_id`, tagged with a new `internal_key` provenance value).
+Songs: `normalize(title)::normalize(artist)`. Restaurants/Venues:
+`normalize(name)::city`, city-level only, chain locations within a city are
+expected to collapse, independent businesses across different cities are
+not. This was a deliberate simplicity/speed tradeoff, real external
+identifiers can be layered in later once funding covers them, this is not
+a permanent architecture decision, same pattern as the TMDB-to-Wikidata
+swap.
+
+**Map pin resolution:** a generic job queue (`jobs` + `geocode_cache`
+tables) resolves coordinates for Restaurants/Venues/Events asynchronously
+via OSM Nominatim, respecting its actual rate policy (4 req/min for a
+recurring script, confirmed against their published policy, stricter than
+originally assumed). Entry creation never blocks on this. An entry with no
+resolved coordinate shows nothing on the map, no placeholder, no coarser
+guess, permanently absent if Nominatim can't resolve it. Verified live: a
+real test entry (Ulele, Tampa) was geocoded, cached, and rendered as a pin
+on the Map screen, not just confirmed by code review.
+
+**Known, deliberate limitation: the cron runs once daily, not more often.**
+Vercel's Hobby plan cannot run cron jobs more frequently than daily, this
+is a hard platform limit, not a config choice. At the current daily cap
+(~15 jobs/run, bounded by function duration), a new Restaurant/Venue/Event
+entry may wait up to 24 hours for its map pin, list-view visibility is
+unaffected, only the map pin lags. **Decision: leave as-is for now.** The
+fix, a Vercel Pro upgrade, unlocks much more frequent cron schedules, but
+isn't worth paying for at current volume. Revisit this the same way as the
+TMDB decision: when real usage volume causes the backlog to visibly lag
+behind actual activity, not on a calendar date.
+
+**Not yet tested, worth doing before treating this as fully verified:**
+the Nominatim-can't-resolve failure path (only the success path has been
+tested), and pacing behavior across a real multi-job batch (only tested
+with a single job so far).
 
 ## Open decisions
 | Decision | Status |
