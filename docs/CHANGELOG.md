@@ -2,6 +2,34 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-20 — Lists screen: top ten / trailing queue, drag-and-reorder, delete
+
+See `docs/adr/0010-drag-and-reorder.md` for full reasoning and the
+live-test notes, including a real bug found and fixed mid-build.
+
+- The Lists screen's personal ranking split into the two zones from the
+  Master Product Data spec: Top 10 (only zone counting toward the
+  aggregate) and Trailing queue (everything else, most-recent-first).
+  Confirmed with the founder before building: kept the existing explicit
+  "Submit to vote" write model (no live-on-reorder), just with no
+  Friday-lock/cycle state.
+- Native HTML5 drag-and-drop (no library added) plus button alternatives
+  for every action: up/down arrows to reorder within the top ten,
+  "↓ queue" to demote, "Promote" to move a queue item into the top ten
+  (bumping the current last slot to the queue's front if already full).
+- New delete action, either zone: removes a `list_items` row only, never
+  `entries` - confirmed live that the underlying entry survives. Scoped to
+  whoever added the item (new RLS policy, `auth.uid() = added_by`) -
+  confirmed with the founder before building, since system lists are a
+  shared community pool and an unscoped delete would let one user
+  de-list another's contribution.
+- Confirmed via direct PostgREST query (bypassing the app's own API route)
+  that the delete write path itself is correct and just waiting on the
+  schema migration being run against the live database - same standing
+  pattern as the Report feature's `reports` table gap.
+- Explicitly out of scope: "Post to Feed" (Feed is still `ComingSoon`,
+  nothing to build toward).
+
 ## 2026-07-20 — Universal action menu: Add to list, Open in, See sources, Share, Report
 
 See `docs/adr/0009-universal-action-menu.md` for full reasoning and the

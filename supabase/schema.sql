@@ -315,6 +315,14 @@ drop policy if exists "list_items are publicly readable" on list_items;
 create policy "list_items are publicly readable" on list_items for select using (true);
 drop policy if exists "signed-in users can add list_items" on list_items;
 create policy "signed-in users can add list_items" on list_items for insert with check (auth.uid() = added_by);
+-- Scoped to whoever added it, not any signed-in user - system lists are a
+-- shared community pool (ADR 0010), so an unscoped delete would let one
+-- user unilaterally de-list another's contribution from a list everyone
+-- else is ranking. Deleting a list_items row cascades to votes (schema
+-- above) but never touches entries - the shared canonical row an entry
+-- occupies possibly-many other lists' list_items through.
+drop policy if exists "users delete own list_items" on list_items;
+create policy "users delete own list_items" on list_items for delete using (auth.uid() = added_by);
 
 drop policy if exists "votes are publicly readable" on votes;
 create policy "votes are publicly readable" on votes for select using (true);

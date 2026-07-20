@@ -20,7 +20,7 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
 
   const { data: items } = await supabase
     .from("list_items")
-    .select("id, entry:entries(id, type, title, subtitle, image_url, source_url, external_id, metadata)")
+    .select("id, added_by, created_at, entry:entries(id, type, title, subtitle, image_url, source_url, external_id, metadata)")
     .eq("list_id", list.id);
 
   const { data: allVotes } = await supabase
@@ -49,6 +49,8 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
       entry: Array.isArray(item.entry) ? item.entry[0] : item.entry,
       avgRank: stats ? stats.sum / stats.count : null,
       voteCount: stats?.count ?? 0,
+      addedBy: item.added_by,
+      createdAt: item.created_at,
     };
   });
 
@@ -67,6 +69,7 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
         myOrder={myVotes}
         homeCity={profile?.city ?? "Tampa"}
         systemLists={systemLists}
+        currentUserId={user.id}
       />
       <AddToListsButton
         systemLists={systemLists}
