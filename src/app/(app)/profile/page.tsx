@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSystemLists } from "@/lib/systemLists";
+import EntryActionMenu from "@/components/EntryActionMenu";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  const systemLists = await getSystemLists(supabase);
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -14,7 +18,9 @@ export default async function ProfilePage() {
 
   const { data: rawVotes } = await supabase
     .from("votes")
-    .select("rank, week_of, list:lists(name), list_item:list_items(entry:entries(title))")
+    .select(
+      "rank, week_of, list:lists(name), list_item:list_items(entry:entries(id, type, title, subtitle, source_url, external_id, metadata))"
+    )
     .eq("user_id", user.id)
     .order("week_of", { ascending: false })
     .order("rank", { ascending: true })
@@ -26,7 +32,7 @@ export default async function ProfilePage() {
     const list = Array.isArray(v.list) ? v.list[0] : v.list;
     const listItem = Array.isArray(v.list_item) ? v.list_item[0] : v.list_item;
     const entry = listItem && (Array.isArray(listItem.entry) ? listItem.entry[0] : listItem.entry);
-    return { rank: v.rank, week_of: v.week_of, listName: list?.name, entryTitle: entry?.title };
+    return { rank: v.rank, week_of: v.week_of, listName: list?.name, entry };
   });
 
   const username = profile?.username ?? user.email?.split("@")[0] ?? "you";
@@ -67,9 +73,10 @@ export default async function ProfilePage() {
                 {v.rank}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{v.entryTitle ?? "Untitled entry"}</p>
+                <p className="text-sm font-medium truncate">{v.entry?.title ?? "Untitled entry"}</p>
                 <p className="text-xs opacity-50 truncate">{v.listName} · week of {v.week_of}</p>
               </div>
+              {v.entry && <EntryActionMenu entry={v.entry} systemLists={systemLists} />}
             </div>
           ))}
           {votes.length === 0 && (

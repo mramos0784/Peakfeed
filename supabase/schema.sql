@@ -273,6 +273,20 @@ create table if not exists geocode_cache (
   created_at timestamptz not null default now()
 );
 
+-- A filed report against an entry (or one of its sources) - the "Report"
+-- action on the universal action menu (api-integrations-addendum.md,
+-- harmful-links section). Deliberately minimal: capture reliably now, no
+-- triage/dashboard/notification workflow yet - that's tracked as a real
+-- launch blocker in docs/prelaunch-checklist.md, decided once real report
+-- volume exists to design against, not guessed at now.
+create table if not exists reports (
+  id uuid primary key default gen_random_uuid(),
+  entry_id uuid not null references entries(id) on delete cascade,
+  reporter_id uuid not null references profiles(id) on delete cascade,
+  reason text,
+  created_at timestamptz not null default now()
+);
+
 -- Row Level Security. Everything is readable by any signed-in user (it's a
 -- public leaderboard). Writes are restricted to acting as yourself.
 alter table profiles enable row level security;
@@ -282,6 +296,7 @@ alter table list_items enable row level security;
 alter table votes enable row level security;
 alter table jobs enable row level security;
 alter table geocode_cache enable row level security;
+alter table reports enable row level security;
 
 drop policy if exists "profiles are publicly readable" on profiles;
 create policy "profiles are publicly readable" on profiles for select using (true);
@@ -319,3 +334,13 @@ create policy "users delete own votes" on votes for delete using (auth.uid() = u
 -- requesting user's own session, not a service-role client.
 drop policy if exists "signed-in users can enqueue jobs" on jobs;
 create policy "signed-in users can enqueue jobs" on jobs for insert with check (auth.uid() is not null);
+
+-- No select policy - same reasoning as jobs/geocode_cache above. A report
+-- is filed against yourself as reporter (mirrors votes/list_items scoping
+-- insert to the acting user), but nobody's RLS-scoped client, including
+-- the reporter's own, should be able to read reports back - there's no
+-- "my reports" UI, and letting a reporter (or worse, anyone) read the
+-- table would leak who reported what before any moderation tooling exists.
+-- Only a future service-role moderation view reads this table.
+drop policy if exists "signed-in users can file reports" on reports;
+create policy "signed-in users can file reports" on reports for insert with check (auth.uid() = reporter_id);

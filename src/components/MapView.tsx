@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import EntryActionMenu from "@/components/EntryActionMenu";
+import type { SystemList } from "@/lib/systemLists";
 
 type MapEntry = {
   id: string;
@@ -11,6 +13,9 @@ type MapEntry = {
   type: string;
   latitude: number;
   longitude: number;
+  source_url: string | null;
+  external_id: string | null;
+  metadata?: { sources?: { url: string; title: string }[] } | null;
 };
 
 // Only the three geocodable types ever reach this component - Songs/
@@ -41,12 +46,27 @@ function escapeHtml(s: string): string {
 // (filtered server-side) - no placeholder position, no coarser guess. It's
 // fully visible in list views the whole time, just absent from this map
 // until (or unless) its geocode job resolves.
-export default function MapView({ entries }: { entries: MapEntry[] }) {
+export default function MapView({ entries, systemLists }: { entries: MapEntry[]; systemLists: SystemList[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const [activeTypes, setActiveTypes] = useState<Set<string>>(
     new Set(["restaurant", "venue", "event"])
   );
+  // Which pin's action menu is open. Leaflet's popup content is a raw HTML
+  // string, not JSX (see the marker loop below), so the "Actions" button
+  // inside it can't be a React child of this tree - it calls a window-level
+  // handler instead, which just sets this id. The actual menu still renders
+  // as a normal React overlay here, controlled rather than self-triggered
+  // (EntryActionMenu's `hideTrigger` mode).
+  const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    (window as unknown as { __pfMapAction?: (id: string) => void }).__pfMapAction = (id: string) =>
+      setActiveEntryId(id);
+    return () => {
+      delete (window as unknown as { __pfMapAction?: (id: string) => void }).__pfMapAction;
+    };
+  }, []);
   // The markers effect below only reruns when `entries`/`activeTypes`
   // change - without this, it fires once on mount (synchronously, before
   // the async `import("leaflet")` above has created the map) and never
@@ -117,7 +137,7 @@ export default function MapView({ entries }: { entries: MapEntry[] }) {
             entry.subtitle
               ? `<br/><span style="color:var(--slate);opacity:0.7;">${escapeHtml(entry.subtitle)}</span>`
               : ""
-          }`
+          }<br/><button onclick="window.__pfMapAction && window.__pfMapAction('${entry.id}')" style="margin-top:6px;font-size:11px;padding:2px 10px;border-radius:9999px;border:1px solid rgba(0,0,0,0.15);background:#fff;cursor:pointer;">Actions</button>`
         );
         markers.push(marker);
       }
@@ -163,6 +183,19 @@ export default function MapView({ entries }: { entries: MapEntry[] }) {
           entries get one within a day.
         </p>
       )}
+      {activeEntryId && (() => {
+        const activeEntry = entries.find((e) => e.id === activeEntryId);
+        if (!activeEntry) return null;
+        return (
+          <EntryActionMenu
+            entry={activeEntry}
+            systemLists={systemLists}
+            hideTrigger
+            open
+            onClose={() => setActiveEntryId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

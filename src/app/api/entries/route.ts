@@ -23,7 +23,24 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   let { external_id, provenance } = body;
-  const { listSlug, type, title, subtitle, image_url, source_url, date, sources, sectionTag, sectionOtherText } = body;
+  const { listSlug, type, title, subtitle, image_url, source_url, date, sources, sectionTag, sectionOtherText, entryId: existingEntryId } = body;
+
+  const { data: list, error: listError } = await supabase
+    .from("lists")
+    .select("id")
+    .eq("slug", listSlug)
+    .single();
+  if (listError || !list) {
+    return NextResponse.json({ error: "Unknown list" }, { status: 400 });
+  }
+
+  // Universal action menu's "Add to list" (docs/api-integrations-addendum.md
+  // section 6): the entry already exists and already carries a resolved
+  // identifier, so this skips the whole dedup/create block below entirely -
+  // straight to attaching the known entry to this list, no re-resolution.
+  if (existingEntryId) {
+    return attachToList(supabase, list.id, existingEntryId, user.id);
+  }
 
   // No real identifier from any resolution tier (no direct catalog API
   // exists for Songs or Restaurants/Venues yet) - fall back to a
@@ -39,15 +56,6 @@ export async function POST(request: Request) {
       external_id = `internal:${type}:${placeDedupKey(title, subtitle)}`;
       provenance = "internal_key";
     }
-  }
-
-  const { data: list, error: listError } = await supabase
-    .from("lists")
-    .select("id")
-    .eq("slug", listSlug)
-    .single();
-  if (listError || !list) {
-    return NextResponse.json({ error: "Unknown list" }, { status: 400 });
   }
 
   let entryId: string | null = null;
@@ -138,10 +146,22 @@ export async function POST(request: Request) {
     }
   }
 
+  return attachToList(supabase, list.id, entryId!, user.id);
+}
+
+// Shared by both the resolve-and-create path above and the "Add to list"
+// shortcut (existingEntryId given, resolution skipped entirely) - the last
+// step is identical either way: attach a known entry_id to a list.
+async function attachToList(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  listId: string,
+  entryId: string,
+  userId: string
+) {
   const { data: listItem, error: listItemError } = await supabase
     .from("list_items")
     .upsert(
-      { list_id: list.id, entry_id: entryId, added_by: user.id },
+      { list_id: listId, entry_id: entryId, added_by: userId },
       { onConflict: "list_id,entry_id", ignoreDuplicates: true }
     )
     .select("id")
@@ -152,7 +172,7 @@ export async function POST(request: Request) {
     const { data: existingItem } = await supabase
       .from("list_items")
       .select("id")
-      .eq("list_id", list.id)
+      .eq("list_id", listId)
       .eq("entry_id", entryId)
       .single();
     return NextResponse.json({ listItemId: existingItem?.id, entryId });

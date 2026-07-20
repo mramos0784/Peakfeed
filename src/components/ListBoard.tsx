@@ -4,14 +4,18 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InListSearchForm from "@/components/InListSearchForm";
+import EntryActionMenu from "@/components/EntryActionMenu";
+import type { SystemList } from "@/lib/systemLists";
 
 type Entry = {
   id: string;
+  type: string;
   title: string;
   subtitle: string | null;
   image_url: string | null;
   source_url: string | null;
   external_id: string | null;
+  metadata?: { sources?: { url: string; title: string }[] } | null;
 };
 
 type Item = {
@@ -36,11 +40,13 @@ export default function ListBoard({
   items,
   myOrder,
   homeCity,
+  systemLists,
 }: {
   list: { slug: string; name: string; type: string };
   items: Item[];
   myOrder: string[];
   homeCity: string;
+  systemLists: SystemList[];
 }) {
   const router = useRouter();
 
@@ -234,6 +240,7 @@ export default function ListBoard({
                   <p className="text-sm font-medium truncate">{item.entry.title}</p>
                   {item.entry.subtitle && <p className="text-xs opacity-50 truncate">{item.entry.subtitle}</p>}
                 </div>
+                <EntryActionMenu entry={item.entry} systemLists={systemLists} />
                 <button onClick={() => move(i, -1)} className="px-1.5 opacity-50 hover:opacity-100">&uarr;</button>
                 <button onClick={() => move(i, 1)} className="px-1.5 opacity-50 hover:opacity-100">&darr;</button>
               </div>
@@ -264,6 +271,7 @@ export default function ListBoard({
                 {item.entry.subtitle && <p className="text-xs opacity-50 truncate">{item.entry.subtitle}</p>}
               </div>
               <span className="text-[10px] opacity-40 shrink-0">{item.voteCount} vote{item.voteCount === 1 ? "" : "s"}</span>
+              <EntryActionMenu entry={item.entry} systemLists={systemLists} />
             </div>
           ))}
           {items.length === 0 && <p className="text-sm opacity-50">No entries yet, be the first to add one.</p>}

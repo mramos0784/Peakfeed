@@ -2,6 +2,39 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-20 — Universal action menu: Add to list, Open in, See sources, Share, Report
+
+See `docs/adr/0009-universal-action-menu.md` for full reasoning and the
+live-test notes.
+
+- New `EntryActionMenu.tsx`, the fixed-order action menu
+  (`api-integrations-addendum.md` section 6) now rendered everywhere an
+  entry actually appears today: `ListBoard`'s personal- and
+  community-ranking rows, `MapView`'s Leaflet popups (via a new "Actions"
+  button), and `profile/page.tsx`'s recent-votes list (whose query grew
+  from `entry(title)` only to the full entry shape this needed).
+- "Add to list" skips resolution entirely — `/api/entries` now accepts an
+  `entryId` shortcut that jumps straight to attaching a known entry to a
+  list, bypassing the whole dedup/create block. Confirmed idempotent
+  against an already-listed entry.
+- "Open in" reconstructs a link from `source_url` or, failing that, the
+  resolved `external_id` (Spotify/Google Maps/Wikidata prefixes) —
+  correctly disabled for PeakFeed's own internal ids (events, internal-key
+  matches).
+- "See sources" finally reads `entries.metadata.sources` (populated for
+  Events since ADR 0004, never surfaced in any UI until now), falling back
+  to `source_url`, falling back to "No sources available."
+- "Report" — new `reports` table (`entry_id`, `reporter_id`, `reason`,
+  `jobs`-pattern RLS: insert-only, no select policy for anyone) and
+  `/api/reports`. Storage only, per `docs/prelaunch-checklist.md` — no
+  triage/dashboard workflow yet, decided once real report volume exists.
+- Confirmed via direct query that the reports save path itself is correct
+  and just waiting on the schema migration being run against the live
+  database (same standing pattern as every schema change in this project —
+  `schema.sql` is run manually in the Supabase SQL editor).
+- Explicitly not built: delete/remove an entry from a list. Belongs with
+  the future drag-and-reorder work, not this menu.
+
 ## 2026-07-20 — In-list search: structured forms, Creator handle match, Events fields, Issues tags
 
 See `docs/adr/0008-in-list-search.md` for full reasoning and live-test

@@ -15,7 +15,7 @@ moved. Not a full repo listing — just what a developer needs to orient.
 | `/lists/[slug]` | `(app)/lists/[slug]/page.tsx` | required | Real: fetches list + items + votes, renders `ListBoard` + `AddToListsButton` (with list context) |
 | `/vote-day` | `(app)/vote-day/page.tsx` | required | `ComingSoon` placeholder — roadmap item 2, needs a vote-cycle/lock table |
 | `/feed` | `(app)/feed/page.tsx` | required | `ComingSoon` placeholder — roadmap item 3, needs a follow/activity model |
-| `/profile` | `(app)/profile/page.tsx` | required | Real: username/city/join date from `profiles`, recent votes from `votes` |
+| `/profile` | `(app)/profile/page.tsx` | required | Real: username/city/join date from `profiles`, recent votes from `votes` (full entry shape since ADR 0009, renders `EntryActionMenu` per row) |
 | `(app)/layout.tsx` | — | enforces auth | Shared layout for all 5 tabs — single auth check, renders `AppShell` |
 
 `(app)` is a Next.js route group: it doesn't appear in the URL, it just
@@ -27,7 +27,8 @@ lets the 5 authenticated tabs share one layout without `/login` and
 | Path | Purpose |
 |---|---|
 | `api/auth/signout` | POST, signs out and redirects to `/login` |
-| `api/entries` | POST, creates an `entries` row + `list_items` row after a parsed link/search result is confirmed. Accepts `sectionTag`/`sectionOtherText` (Issues only, ADR 0008) and writes them to `entries.attributes` |
+| `api/entries` | POST, creates an `entries` row + `list_items` row after a parsed link/search result is confirmed. Accepts `sectionTag`/`sectionOtherText` (Issues only, ADR 0008) and writes them to `entries.attributes`. Accepts `entryId` (ADR 0009, the universal action menu's "Add to list") to skip resolution entirely and attach a known entry straight to a list |
+| `api/reports` | POST `{entryId, reason?}` (ADR 0009), inserts into `reports` — the universal action menu's "Report" action. Storage only, no read/triage surface yet (`reports` has no select policy for anyone, see `docs/prelaunch-checklist.md`) |
 | `api/parse-link` | POST, resolves a pasted URL (or, Events only, a typed description) via `src/lib/parseLink.ts`. Response includes `provenance`, mapped server-side from the resolution's internal `source` |
 | `api/search/wikidata` | POST `{query, category}`, branches (ADR 0008) between fuzzy name search (`searchWikidata`, Films/Events/Issues) and exact handle-property SPARQL match (`searchWikidataByHandle`, the four Creator types) via `src/lib/wikidataSearch.ts` — returns `{candidates: []}` for any other category |
 | `api/search/web` | POST `{query, category, location?, date?}`, multi-candidate web search via `parseLink.ts`'s `webSearchCandidates()` — up to 5 results, not converged to one answer. `location`/`date` (Events' in-list search only, ADR 0008) enrich the prompt, used to disambiguate recurring event names |
@@ -44,7 +45,8 @@ lets the 5 authenticated tabs share one layout without `/login` and
 | `ComingSoon.tsx` | Shared placeholder for nav tabs with no backend yet (Map, Vote Day, Feed) |
 | `ListBoard.tsx` | Client component: the actual Lists-screen functionality — paste-link parse/confirm, personal ranking, vote submission, community ranking display. Per-list add box, kept in parallel with `AddToListsButton` until that's confirmed working. Renders `InListSearchForm` below the link box |
 | `InListSearchForm.tsx` | Client component: structured, named-field in-list search (ADR 0008) — distinct from `AddToListsButton`'s single free-text box. Category fixed by the list it's rendered in: Songs/Restaurants/Venues save directly (internal-key dedup, no candidates); Movies/Events/Creators/Issues search Wikidata + web in parallel and show a confirm step |
-| `MapView.tsx` | Client component: vanilla Leaflet map (not `react-leaflet`), pins only for entries with resolved coordinates, OSM attribution via the tile layer's standard mechanism, category filter, tap-for-popup (ADR 0007) |
+| `MapView.tsx` | Client component: vanilla Leaflet map (not `react-leaflet`), pins only for entries with resolved coordinates, OSM attribution via the tile layer's standard mechanism, category filter, tap-for-popup (ADR 0007). Popup carries an "Actions" button (ADR 0009) wired via a `window.__pfMapAction` handler, since Leaflet's popup content is raw HTML, not a React child — opens `EntryActionMenu` in controlled (`hideTrigger`) mode |
+| `EntryActionMenu.tsx` | Client component (ADR 0009): the universal action menu — Add to list / Open in / See sources / Share / Report, same fixed order everywhere an entry renders (`ListBoard`, `MapView`'s popup, `profile/page.tsx`'s recent votes). Self-triggering (own "⋯" button) by default, or controlled via `hideTrigger`+`open`+`onClose` for surfaces where the trigger can't live in this component's own React tree |
 | `WaitlistForm.tsx` | Client component: name/email/city + interest checkboxes, posts to `/api/waitlist`, surfaces real errors, disabled submit until ≥1 checkbox is checked |
 
 ## Lib (`src/lib`)
@@ -69,6 +71,8 @@ lets the 5 authenticated tabs share one layout without `/login` and
 | `src/proxy.ts` | Next.js middleware, keeps the Supabase session cookie fresh on every request (does not gate routes — auth gating lives in `(app)/layout.tsx`) |
 | `src/app/layout.tsx` | Root HTML shell: Bebas Neue + DM Sans fonts, Tabler icons webfont (used by `AppShell`'s nav icons) |
 | `src/app/globals.css` | Brand color tokens (rust/slate/olive/sage/mist) + `pf-*` classes for the nav shell, `wl-*` classes for the waitlist homepage |
-| `supabase/schema.sql` | Full DB schema, version-controlled — `profiles`, `entries` (`provenance` [`resolution_provenance` enum, now 7 values with `internal_key`], `attributes` jsonb [Issues' `section_tag`/`section_other_text` since ADR 0008, otherwise unpopulated], `metadata`, `latitude`/`longitude` [null until geocoded, ADR 0007]), `lists` (`category` column, unused; ten system lists), `list_items`, `votes`, `jobs` (generic queue), `geocode_cache`. Additive changes use `alter table/type ... add ... if not exists` (or a `duplicate_object`-catching `DO` block for `CREATE TYPE`, which has no native `IF NOT EXISTS`) so re-running the file against an existing database is safe |
+| `supabase/schema.sql` | Full DB schema, version-controlled — `profiles`, `entries` (`provenance` [`resolution_provenance` enum, now 7 values with `internal_key`], `attributes` jsonb [Issues' `section_tag`/`section_other_text` since ADR 0008, otherwise unpopulated], `metadata`, `latitude`/`longitude` [null until geocoded, ADR 0007]), `lists` (`category` column, unused; ten system lists), `list_items`, `votes`, `jobs` (generic queue), `geocode_cache`, `reports`
+(ADR 0009 — `entry_id`/`reporter_id`/`reason`, `jobs`-pattern RLS: insert
+scoped to the acting user, no select policy for anyone). Additive changes use `alter table/type ... add ... if not exists` (or a `duplicate_object`-catching `DO` block for `CREATE TYPE`, which has no native `IF NOT EXISTS`) so re-running the file against an existing database is safe |
 | `public/reference/peakfeed_v2.html` | The static design prototype — moved here (from `reference/` at repo root) so the waitlist homepage can embed it in an iframe at `/reference/peakfeed_v2.html`. Still the CLAUDE.md-referenced visual target, just servable now. |
 | `vercel.json` | Cron schedule for `/api/cron/geocode` — once daily (`0 6 * * *`), the Hobby plan's hard minimum interval. A one-line change to go more frequent on Pro |
