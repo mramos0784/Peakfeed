@@ -105,9 +105,64 @@ is the paid, SLA-backed alternative.
 ### Confirmed dead ends — don't build, don't revisit without new information
 | Source | Why |
 |---|---|
-| Amazon Music | No public API, bot-detection, JS-rendered shell (existing addendum) |
-| share.google | Google's own share-button URL shortener, wraps a search result, no real metadata behind it, ever |
-| U.S. Copyright Office (copyright.gov) | No documented public API. Current system (CPRS, replaced the old Public Catalog in 2025) is a search portal only. Programmatic/bulk access is a paid manual service ($200/hr, human-run), not viable for a live flow |
+| share.google | Google's own share-button URL shortener, wraps a search result/knowledge panel, no real metadata behind it, ever. Genuinely opaque short hash with zero embedded text, no resolver applies since the content type is unknown until the blocked redirect is followed |
+| U.S. Copyright Office (copyright.gov) | No documented public API. Current system (CPRS, replaced the old Public Catalog in 2025) is a search portal only. Programmatic/bulk access is a paid manual service ($200/hr, human-run), not viable for a live flow. Note: never a share-link source to begin with, this was investigated as a potential identifier lookup source, not something a user would ever paste |
+
+### Amazon Music — upgraded, no longer a permanent dead end
+**Correction to the original diagnosis.** Amazon Music's own URLs are genuinely
+opaque (`music.amazon.com/albums/{ASIN}/?trackAsin={ASIN}`, no readable
+title/artist text to extract), so there's nothing to seed a search from the
+link itself. But **Odesli (song.link)** solves this properly: given any
+music link, including Amazon Music, it returns the equivalent links across
+other platforms plus metadata, often including the real ISRC. Free, no API
+key required for reasonable volume (10 requests/minute unauthenticated,
+higher available by emailing for a free key).
+
+**Resolution order for Amazon Music links, going forward:** call Odesli
+first. If it returns a Spotify match with an ISRC, resolve through the
+existing Spotify-based Song identifier pipeline as if it were a native
+Spotify share, tag provenance the same as a direct API match. If Odesli has
+no match or doesn't return an ISRC, fall back to the existing "can't
+auto-detect this, search below" path, same as before. This replaces Amazon
+Music's permanent-dead-end status with a real resolution path, cache
+results the same way as other rate-limited lookups in this doc.
+
+**Deferred, not built yet — see priority decision below.** This is a real,
+viable fix, but building it now was reconsidered given the current phase's
+actual usage pattern (see "Search-first for the current browser PWA phase").
+
+## Search-first for the current browser PWA phase (deliberate priority decision)
+**Decision: search is the primary interaction for all categories in this
+phase, link-paste stays supported but isn't where further engineering
+investment goes right now.** Reasoning: in a browser PWA with no native
+share sheet (that arrives with the React Native app per the Master Product
+Data build path), sharing a link requires leaving the app, finding the
+content elsewhere, copying, switching back, and pasting. Typing what you're
+looking for is lower-friction in this specific context, not just simpler to
+build. This holds per category: Songs/Restaurants/Movies/Creators already
+fit search-first cleanly; Events works via the multi-field search form
+(Name/Date/Location) already specced, date resolves the recurring-event
+ambiguity; Issues via topic name plus section tag.
+
+**Explicit exception, stays equally prominent:** flyer-photo upload for
+Events is not a link and not being deprioritized, it's the strongest,
+most reliable resolution path for that category and should remain a
+first-class input option, not folded under or beneath search.
+
+**Practical consequence:** don't invest further engineering effort into
+link-parsing robustness for edge cases (Odesli/Amazon Music above, deeper
+oEmbed work, etc.) until link-sharing is actually the primary channel.
+Already-working link resolution (Spotify scrape, Wikidata for Films, the
+Events web-search-source pattern) stays as-is and still gets called
+opportunistically when a link is pasted, this isn't being removed, just
+not where new work goes.
+
+**Revisit trigger, same pattern as the TMDB and Vercel Pro decisions
+elsewhere in this doc:** once the native share sheet exists (Phase 3,
+React Native), or if real browser-phase usage shows people pasting links
+more than expected, that's the signal to resume investing in link-parsing
+robustness, including building the Odesli integration above. Not a
+calendar date, a usage signal.
 
 ### Deprioritized, not dead
 **X/Twitter API** — pricing is tightly tiered and expensive at this point,
@@ -382,6 +437,81 @@ behind actual activity, not on a calendar date.
 the Nominatim-can't-resolve failure path (only the success path has been
 tested), and pacing behavior across a real multi-job batch (only tested
 with a single job so far).
+
+## 10. Issues — sources require a link, the topic itself still doesn't
+**Clarification, not a reversal of section 3 above.** "Require a link"
+applies to a *source/article contribution* to an existing Issue, not to
+creating the Issue topic itself. The topic-creation path (typed name plus
+section tag, Wikidata/web-search enrichment when a match exists) stays
+exactly as speced, an Issue with no article anywhere, a hyperlocal
+complaint with nothing written about it, must still be creatable. An
+"article" with no URL isn't a resource, it's just an opinion, so the
+distinction holds: no link required to create the topic, a link is
+required to add to its source/resource feed.
+
+**Exact-link count, separate from the fuzzy topic-level dedup already
+built.** Normalize the URL (strip tracking params/session tokens, same
+Tier 2 pattern already speced for article URLs in the Intelligence Layer
+doc), then count exact matches. This is precise on purpose, no fuzzy
+matching here, unlike topic-name dedup which stays intentionally
+approximate per the tradeoff already accepted in section 3.
+
+**Attribute capture per source:** a direct fetch-and-parse job (Tier 1/2,
+not an LLM problem) pulling Open Graph meta tags, `og:title`,
+`og:site_name`, `article:published_time`, gives headline, publisher, and
+date from most real news sites without anything fancier.
+
+## 11. Top stories — per-issue and cross-tag, both
+**Both ranking surfaces are in scope, they're different queries over the
+same underlying share-count data, not two separate features to build from
+scratch.**
+- **Per-issue:** rank sources within one Issue's own resource feed by
+  share count, already implicit in the Master doc's article resource feed
+  concept, now actually functional once the exact-link-count mechanism
+  above exists.
+- **Cross-tag:** a "top stories in Politics this week" view aggregating
+  share counts across every Issue carrying that section tag. New surface,
+  its own query and likely its own UI, not previously speced anywhere
+  before this conversation.
+
+## 12. Harmful links — two different problems, two different fixes
+**Not a single feature, splitting deliberately because the fixes don't
+overlap.**
+
+**Technically malicious links (malware, phishing):** Google's Safe
+Browsing API, the obvious free option, is explicitly non-commercial-use
+only and is itself deprecated, pointing to **Web Risk API** as the real
+replacement. Web Risk is the compliant tool for a commercial product, but
+its free tier is capped at a limited number of daily checks, and it
+requires an actual Google Cloud Billing account, same friction already
+flagged and avoided for Places. No clean free-and-simple answer exists
+here the way Wikidata solved Films.
+
+**Content-based harm (misinformation, hate speech, illegal content) has no
+API answer at all.** No service reliably flags "this is propaganda" or
+"this source is a hate site." This is a moderation-policy problem, not a
+technical one, regardless of what happens with Web Risk.
+
+**Decision: ship the baseline now, this is not a "defer until funded" item
+like the precision tradeoffs elsewhere in this doc.** A wrong dedup match
+is embarrassing; a phishing link served up as a source is real harm to a
+real person who clicks it, different risk category, doesn't get the same
+"simple now, integrity later" treatment.
+- **Build now:** a "Report" action, reachable from the universal action
+  menu or "See sources," and storage for reports as they come in. This is
+  the actual first line of defense regardless of what happens with
+  automated scanning, a human catches plenty a scanner misses (a
+  misleading source, not just literal malware).
+- **Deferred, tracked in `prelaunch-checklist.md`, not decided now:** the
+  actual review/triage workflow, dashboard vs. email notification vs.
+  manual check. Right call is to decide this once there's real report
+  volume to look at, not guess at a process now. Must be resolved before
+  public launch, tracked there so it doesn't get lost.
+- **Deferred, with a lower bar to revisit than other deferred items:** Web
+  Risk API integration. Revisit once there's already a Cloud Billing
+  account for something else (marginal cost becomes small), or as soon as
+  real usage shows this is an actual problem, not hypothetical, whichever
+  comes first.
 
 ## Open decisions
 | Decision | Status |

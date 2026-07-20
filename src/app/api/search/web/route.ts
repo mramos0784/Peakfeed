@@ -10,13 +10,18 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
-  const { query, category } = (await request.json()) as { query?: string; category?: EntryType };
+  const { query, category, location, date } = (await request.json()) as {
+    query?: string;
+    category?: EntryType;
+    location?: string;
+    date?: string;
+  };
   if (!query || !category) {
     return NextResponse.json({ error: "Missing query or category" }, { status: 400 });
   }
 
   try {
-    const candidates = await webSearchCandidates(query, category);
+    const candidates = await webSearchCandidates(query, category, { location, date });
     return NextResponse.json({ candidates });
   } catch (err) {
     console.error("search/web failed", err);

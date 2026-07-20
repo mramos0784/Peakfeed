@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import InListSearchForm from "@/components/InListSearchForm";
 
 type Entry = {
   id: string;
@@ -34,10 +35,12 @@ export default function ListBoard({
   list,
   items,
   myOrder,
+  homeCity,
 }: {
   list: { slug: string; name: string; type: string };
   items: Item[];
   myOrder: string[];
+  homeCity: string;
 }) {
   const router = useRouter();
 
@@ -183,6 +186,8 @@ export default function ListBoard({
         </div>
         {parseError && <p className="text-red-600 text-xs mt-2">{parseError}</p>}
       </form>
+
+      <InListSearchForm list={list} homeCity={homeCity} />
 
       {preview && (
         <div className="mb-4 bg-white rounded-lg p-3 border-2" style={{ borderColor: "var(--sage)" }}>

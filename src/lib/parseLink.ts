@@ -97,6 +97,12 @@ const CATEGORY_LABELS: Partial<Record<EntryType, string>> = {
 
 const CANDIDATE_SEARCH_MAX_USES = 5;
 
+// Events' in-list search form has separate Name/Location/Date fields
+// (docs/api-integrations-addendum.md section 9) - Date matters here because
+// recurring event names ("Reggae Night") are ambiguous without it, unlike
+// every other category's search, which is a single free-text query.
+export type EventSearchExtra = { location?: string; date?: string };
+
 /**
  * Web search, but enumerating several candidates instead of converging on
  * one answer - distinct from webSearchExtractEvent, which is for a
@@ -105,16 +111,32 @@ const CANDIDATE_SEARCH_MAX_USES = 5;
  * to pick from multiple results. Used for the simultaneous Wikidata +
  * web-search flow (Films/Events/Issues/Creators) - see docs/adr/0006.
  */
-export async function webSearchCandidates(query: string, category: EntryType): Promise<SearchCandidate[]> {
+export async function webSearchCandidates(
+  query: string,
+  category: EntryType,
+  extra?: EventSearchExtra
+): Promise<SearchCandidate[]> {
   const categoryLabel = CATEGORY_LABELS[category] ?? category;
+  const detailLines = [
+    extra?.location ? `Location: ${extra.location}` : null,
+    extra?.date ? `Date: ${extra.date}` : null,
+  ].filter(Boolean);
+  const detailBlock = detailLines.length ? `\n${detailLines.join("\n")}` : "";
+
   const prompt = `A user is searching PeakFeed, a community ranking app, for a
-"${categoryLabel}" entry matching: "${query}"
+"${categoryLabel}" entry matching: "${query}"${detailBlock}
 
 Use web search to find up to 5 real, distinct candidates that could match
 this search - not just your single best guess, several plausible matches
 if more than one genuinely exists (e.g. a film and its remake, two public
-figures with a similar name). Assume the Tampa Bay, Florida area for
-anything locally ambiguous, unless the query clearly says otherwise.
+figures with a similar name${
+    extra?.date ? ", or a recurring event by this name on a different date than the one given" : ""
+  }). Assume the Tampa Bay, Florida area for anything locally ambiguous,
+unless the query clearly says otherwise.${
+    extra?.date
+      ? " Treat the date above as disambiguating, not strictly required to match - prefer candidates near that date, but don't discard an otherwise-strong match over it."
+      : ""
+  }
 
 After searching, respond with ONLY a JSON array as your final message, no
 other text, matching this shape:

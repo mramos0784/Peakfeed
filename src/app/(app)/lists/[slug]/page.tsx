@@ -16,6 +16,8 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
 
   const systemLists = await getSystemLists(supabase);
 
+  const { data: profile } = await supabase.from("profiles").select("city").eq("id", user.id).single();
+
   const { data: items } = await supabase
     .from("list_items")
     .select("id, entry:entries(id, title, subtitle, image_url, source_url, external_id)")
@@ -63,6 +65,7 @@ export default async function ListDetailPage({ params }: { params: Promise<{ slu
         list={{ slug: list.slug, name: list.name, type: list.type }}
         items={enrichedItems}
         myOrder={myVotes}
+        homeCity={profile?.city ?? "Tampa"}
       />
       <AddToListsButton
         systemLists={systemLists}

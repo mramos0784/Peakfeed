@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   let { external_id, provenance } = body;
-  const { listSlug, type, title, subtitle, image_url, source_url, date, sources } = body;
+  const { listSlug, type, title, subtitle, image_url, source_url, date, sources, sectionTag, sectionOtherText } = body;
 
   // No real identifier from any resolution tier (no direct catalog API
   // exists for Songs or Restaurants/Venues yet) - fall back to a
@@ -95,6 +95,13 @@ export async function POST(request: Request) {
         provenance: provenance ?? null,
         created_by: user.id,
         metadata: type === "event" ? { date: date ?? null, sources: sources ?? [] } : {},
+        // Issues' section tag (docs/api-integrations-addendum.md section 8):
+        // a descriptive attribute of the entry, not resolution metadata, so
+        // it belongs in `attributes` alongside future genre/nationality/etc
+        // fields, not `metadata`. Stored as two separate keys, never
+        // collapsed into one - an "Other" pick and a real tag pick must stay
+        // distinguishable when the Other bucket gets reviewed later.
+        attributes: type === "issue" && sectionTag ? { section_tag: sectionTag, section_other_text: sectionOtherText ?? null } : {},
       })
       .select("id")
       .single();
