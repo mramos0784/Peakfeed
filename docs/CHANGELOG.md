@@ -2,6 +2,32 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-07-21 — Follow/unfollow, public profiles, username search
+
+See `docs/adr/0011-follow-unfollow.md` for full reasoning and live-test
+notes. Feed's real prerequisite — confirmed via the prior status check
+that none of this existed yet.
+
+- New `follows` table: unlimited, one tap, public counts, no approval
+  step — the whole model, not a partial one. Composite primary key
+  (`follower_id, followed_id`) makes a repeat follow a no-op upsert
+  instead of an error.
+- New `/profile/[username]` route — any user's profile (avatar, city,
+  join date, follower/following counts, Follow/Following toggle). Thinner
+  than self-view `/profile` on purpose (no recent votes, no log-out).
+  Visiting your own username redirects to the real self-view page.
+- Self-view `/profile` gains follower/following counts and a new
+  `UserSearchBox` (partial `profiles.username` match) — the actual
+  discovery mechanism this session, since no user directory or search
+  existed. Explicitly temporary real estate; moves to Feed once built.
+- Explicitly did not make `list_items.added_by` a public link anywhere,
+  per instruction — system lists stay unattributed community content.
+- Explicitly out of scope: the Feed screen itself, and any post/activity-
+  sharing toggle (tied to Feed, not to follow/unfollow).
+- Confirmed via direct query that the write path is correct and waiting
+  on the schema migration being run — same standing pattern as Report and
+  list-delete before it.
+
 ## 2026-07-20 — Lists screen: top ten / trailing queue, drag-and-reorder, delete
 
 See `docs/adr/0010-drag-and-reorder.md` for full reasoning and the

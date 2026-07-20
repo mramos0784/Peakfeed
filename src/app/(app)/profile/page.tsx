@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSystemLists } from "@/lib/systemLists";
 import EntryActionMenu from "@/components/EntryActionMenu";
+import UserSearchBox from "@/components/UserSearchBox";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -15,6 +16,15 @@ export default async function ProfilePage() {
     .select("username, city, created_at")
     .eq("id", user.id)
     .single();
+
+  const { count: followerCount } = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("followed_id", user.id);
+  const { count: followingCount } = await supabase
+    .from("follows")
+    .select("*", { count: "exact", head: true })
+    .eq("follower_id", user.id);
 
   const { data: rawVotes } = await supabase
     .from("votes")
@@ -57,11 +67,18 @@ export default async function ProfilePage() {
               {profile?.city ?? "Tampa"}
               {memberSince && ` · Member since ${memberSince}`}
             </p>
+            <p className="text-xs mt-1" style={{ color: "var(--mist)" }}>
+              <span className="font-medium">{followerCount ?? 0}</span> followers
+              <span className="opacity-50"> &middot; </span>
+              <span className="font-medium">{followingCount ?? 0}</span> following
+            </p>
           </div>
         </div>
       </div>
 
       <div className="p-6 max-w-md mx-auto">
+        <UserSearchBox />
+
         <h2 className="text-xs uppercase tracking-wide opacity-50 mb-2">Recent votes</h2>
         <div className="space-y-1 mb-8">
           {votes.map((v, i) => (

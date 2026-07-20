@@ -25,7 +25,7 @@ export default function AppShell({
   return (
     <div className="pf-shell">
       <header className="pf-app-header">
-        <Link href="/map" className="pf-logo">
+        <Link href="/" className="pf-logo">
           PEAKFEED
         </Link>
         <Link href="/profile" className="pf-avatar-btn" aria-label="Profile">

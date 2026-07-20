@@ -287,11 +287,26 @@ create table if not exists reports (
   created_at timestamptz not null default now()
 );
 
+-- Follow relationships (Master Product Data section 8, Social layer):
+-- unlimited, one tap, public counts - no cap, no approval step, no
+-- private/pending state, so this is the whole model, not a partial one
+-- awaiting a request/accept flow later. Composite primary key does the
+-- "already following" dedup for free (a second follow attempt just
+-- upserts onto the same row) instead of needing a separate unique index.
+create table if not exists follows (
+  follower_id uuid not null references profiles(id) on delete cascade,
+  followed_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (follower_id, followed_id),
+  constraint follows_no_self_follow check (follower_id <> followed_id)
+);
+
 -- Row Level Security. Everything is readable by any signed-in user (it's a
 -- public leaderboard). Writes are restricted to acting as yourself.
 alter table profiles enable row level security;
 alter table entries enable row level security;
 alter table lists enable row level security;
+alter table follows enable row level security;
 alter table list_items enable row level security;
 alter table votes enable row level security;
 alter table jobs enable row level security;
@@ -332,6 +347,17 @@ drop policy if exists "users update own votes" on votes;
 create policy "users update own votes" on votes for update using (auth.uid() = user_id);
 drop policy if exists "users delete own votes" on votes;
 create policy "users delete own votes" on votes for delete using (auth.uid() = user_id);
+
+-- Public counts, per spec - unlike reports/jobs, everyone can read the
+-- whole table, not just their own rows, since a profile's follower/
+-- following counts (and eventually follower/following lists) are meant to
+-- be visible to anyone, not just the two people in the relationship.
+drop policy if exists "follows are publicly readable" on follows;
+create policy "follows are publicly readable" on follows for select using (true);
+drop policy if exists "users manage own follows" on follows;
+create policy "users manage own follows" on follows for insert with check (auth.uid() = follower_id);
+drop policy if exists "users delete own follows" on follows;
+create policy "users delete own follows" on follows for delete using (auth.uid() = follower_id);
 
 -- jobs and geocode_cache are internal/machine-managed - no select policy
 -- for either, so a signed-in user's own (anon-key, RLS-scoped) client sees
