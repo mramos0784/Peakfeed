@@ -49,13 +49,23 @@ Mist `#C3D3DE`.
 ## Build order (from ROADMAP.md — don't reorder without reason)
 1. Persistent tab nav shell (Map / Lists / Vote Day / Feed / Profile) — everything
    else attaches to this, build first
-2. Vote Day / results screen (data already exists, just needs a view)
-3. Activity feed (unfiltered, reverse-chronological to start)
-4. Profile screen (basic: username, city, join date, vote history — skip streaks/
+2. Aggregate scoring rework: average → sum-based Borda count, with a one-active-
+   submission-per-user-per-list-per-period guardrail against resubmission gaming
+3. Vote Day / results screen (data already exists, just needs a view — now
+   reflecting the reworked scoring)
+4. Two-tier deduplication (Boolean, not fuzzy): Tier 1 auto-matches on canonical
+   platform ID, Tier 2 surfaces normalized-title/category/location matches through
+   the existing confirm-before-save flow, no auto-block
+5. Activity feed (unfiltered, reverse-chronological to start)
+6. Profile screen (basic: username, city, join date, vote history — skip streaks/
    followers/notifications, no backend for those yet)
-5. Map screen (static Tampa map, pins only for entries with coordinates)
-6. Personal lists (reuses existing `lists`/`list_items` tables, `list_kind = 'personal'`)
-7. Group lists (needs new membership table + invite-link generation)
+7. Personal lists (reuses existing `lists`/`list_items` tables, `list_kind = 'personal'`)
+8. Internal search (Map screen only — queries existing lists/groups/users/list
+   items, distinct from outbound search)
+9. Map screen enhancements (pan/zoom-triggered re-aggregation, later-phase infra)
+10. Group lists (needs new membership table + invite-link generation)
+11. Implicit testing signals (low priority — track empty outbound searches and
+    repeated searches without a confirmed entry, once outbound search stabilizes)
 
 ## Documentation discipline (already agreed, keep following it)
 Every feature built produces, alongside the code: inline comments on non-obvious
