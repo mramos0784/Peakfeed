@@ -44,6 +44,7 @@ export async function POST(request: Request) {
     external_id: `wikidata:${r.qid}`,
     provenance: "wikidata_match",
     sourceLabel: "Wikidata",
+    source_url: `https://www.wikidata.org/wiki/${r.qid}`,
   }));
 
   return NextResponse.json({ candidates });

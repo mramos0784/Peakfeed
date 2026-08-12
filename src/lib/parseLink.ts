@@ -83,6 +83,11 @@ export type SearchCandidate = {
   external_id: string | null;
   provenance: ResolutionProvenance;
   sourceLabel: string;
+  // A real page confirming this candidate, read back from the search API's
+  // own result URLs (see the foundUrls check in webSearchCandidates below) -
+  // never a URL the model merely typed into its JSON answer. Wikidata
+  // candidates never set this, they're their own source.
+  source_url: string | null;
 };
 
 const CATEGORY_LABELS: Partial<Record<EntryType, string>> = {
@@ -122,6 +127,11 @@ export async function webSearchCandidates(
     extra?.date ? `Date: ${extra.date}` : null,
   ].filter(Boolean);
   const detailBlock = detailLines.length ? `\n${detailLines.join("\n")}` : "";
+  // Restaurants and Venues are both "a physical place with a name" - same
+  // prompt treatment for both (ADR 0012), distinct from every other category
+  // this function serves.
+  const isPlace = category === "restaurant" || category === "venue";
+  const placeNoun = category === "restaurant" ? "restaurant" : "venue";
 
   const prompt = `A user is searching PeakFeed, a community ranking app, for a
 "${categoryLabel}" entry matching: "${query}"${detailBlock}
@@ -136,13 +146,26 @@ unless the query clearly says otherwise.${
     extra?.date
       ? " Treat the date above as disambiguating, not strictly required to match - prefer candidates near that date, but don't discard an otherwise-strong match over it."
       : ""
+  }${
+    isPlace
+      ? ` Only include ${placeNoun}s you found evidence are currently open in the Tampa Bay area - if the search suggests a place has closed, leave it out.`
+      : ""
   }
 
 After searching, respond with ONLY a JSON array as your final message, no
 other text, matching this shape:
 [
-  { "title": string, "subtitle": string | null }
-]
+  { "title": string, "subtitle": string | null, "source_url": string | null }
+]${
+    isPlace
+      ? `\n"subtitle" must be just the city, or neighborhood and city (e.g. "Ybor City, Tampa"), so the result can be located on a map later - not a tagline or genre/cuisine description.`
+      : ""
+  }
+"source_url" is the URL of one real page from your search results that
+confirms this specific candidate (the business's own site, a review or
+directory listing) - copy it exactly from a result you actually found,
+never construct or guess one; use null if you're not sure which result
+page it came from.
 Only include real things you found evidence for via search - fewer than 5
 is fine, and an empty array [] is the right answer if nothing plausible
 turns up.`;
@@ -167,6 +190,19 @@ turns up.`;
     return [];
   }
 
+  // Real result pages the search actually returned, read straight from the
+  // API response - same anti-hallucination check webSearchExtractEvent uses
+  // for its `sources` list, applied here per-candidate to "source_url" so a
+  // model-typed-but-fabricated URL never reaches an entry's source link.
+  const foundUrls = new Set<string>();
+  for (const block of message.content) {
+    if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+      for (const result of block.content) {
+        if (result.type === "web_search_result") foundUrls.add(result.url);
+      }
+    }
+  }
+
   const textBlocks = message.content.filter((b) => b.type === "text");
   const lastText = textBlocks[textBlocks.length - 1]?.text ?? "[]";
   let parsed: unknown;
@@ -188,7 +224,7 @@ turns up.`;
     return [];
   }
 
-  return (parsed as { title?: string; subtitle?: string | null }[])
+  return (parsed as { title?: string; subtitle?: string | null; source_url?: string | null }[])
     .filter((c) => c.title && !isLowInformationTitle(c.title))
     .map((c) => ({
       category,
@@ -198,6 +234,7 @@ turns up.`;
       external_id: null,
       provenance: "web_search" as const,
       sourceLabel: "Web search",
+      source_url: c.source_url && foundUrls.has(c.source_url) ? c.source_url : null,
     }));
 }
 

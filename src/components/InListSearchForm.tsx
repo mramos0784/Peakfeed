@@ -14,6 +14,7 @@ type SearchCandidate = {
   external_id: string | null;
   provenance: ResolutionProvenance;
   sourceLabel: string;
+  source_url: string | null;
 };
 
 // Only the two provenance values a search-sourced candidate can ever carry
@@ -26,7 +27,12 @@ const PROVENANCE_LABEL: Partial<Record<ResolutionProvenance, string>> = {
 // Categories with no live catalog to search against - typed input goes
 // straight through the internal dedup key (src/lib/normalize.ts) and
 // creates/matches the entry directly, no candidates to choose from.
-const DIRECT_CREATE_TYPES = ["song", "restaurant", "venue"];
+// Restaurants and Venues used to be direct-create too (no Google Places
+// integration - see docs/api-integrations-addendum.md section 8) but now
+// reuse the same Wikidata + web-search flow as Films/Events, which can also
+// surface a real source link and a geocodable city/neighborhood - see
+// ADR 0012.
+const DIRECT_CREATE_TYPES = ["song"];
 
 const CREATOR_TYPES = ["x_creator", "instagram_creator", "tiktok_creator", "youtube_creator"];
 
@@ -53,16 +59,21 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
   const isCreator = CREATOR_TYPES.includes(type);
   const isEvent = type === "event";
   const isIssue = type === "issue";
+  // Restaurants and Venues share one query field and the same City-subtitle
+  // treatment below - both are "a physical place with a name and a city"
+  // in exactly the same shape (ADR 0012).
+  const isPlace = type === "restaurant" || type === "venue";
 
   const [step, setStep] = useState<Step>("form");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Direct-create fields (Songs / Restaurants / Venues)
+  // Direct-create fields (Songs only)
   const [directTitle, setDirectTitle] = useState("");
-  const [directSubtitle, setDirectSubtitle] = useState(type === "restaurant" || type === "venue" ? homeCity : "");
+  const [directSubtitle, setDirectSubtitle] = useState("");
 
   // Search-query fields, per category
   const [movieTitle, setMovieTitle] = useState("");
+  const [placeQuery, setPlaceQuery] = useState("");
   const [eventName, setEventName] = useState("");
   const [eventLocation, setEventLocation] = useState("");
   const [eventDate, setEventDate] = useState("");
@@ -83,11 +94,13 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
   const [confirmSubtitle, setConfirmSubtitle] = useState("");
   const [confirmExternalId, setConfirmExternalId] = useState<string | null>(null);
   const [confirmProvenance, setConfirmProvenance] = useState<ResolutionProvenance | null>(null);
+  const [confirmSourceUrl, setConfirmSourceUrl] = useState<string | null>(null);
 
   function resetAfterSave() {
     setDirectTitle("");
-    setDirectSubtitle(type === "restaurant" || type === "venue" ? homeCity : "");
+    setDirectSubtitle("");
     setMovieTitle("");
+    setPlaceQuery("");
     setEventName("");
     setEventLocation("");
     setEventDate("");
@@ -102,6 +115,7 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
 
   function searchQuery(): string {
     if (type === "movie") return movieTitle.trim();
+    if (isPlace) return placeQuery.trim();
     if (isEvent) return eventName.trim();
     if (isCreator) return handle.trim();
     if (isIssue) return issueName.trim();
@@ -183,9 +197,13 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
 
   function selectCandidate(c: SearchCandidate) {
     setConfirmTitle(c.title);
-    setConfirmSubtitle(c.subtitle ?? "");
+    // Search-found subtitle wins; for Restaurants/Venues specifically, fall
+    // back to the user's own city rather than leaving the field blank - it
+    // still needs a real value to feed the map's geocode job (ADR 0012).
+    setConfirmSubtitle(c.subtitle ?? (isPlace ? homeCity : ""));
     setConfirmExternalId(c.external_id);
     setConfirmProvenance(c.provenance);
+    setConfirmSourceUrl(c.source_url);
     setStep("confirm");
   }
 
@@ -204,7 +222,7 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
           title,
           subtitle: confirmSubtitle.trim() || null,
           image_url: null,
-          source_url: null,
+          source_url: confirmSourceUrl,
           external_id: confirmExternalId,
           provenance: confirmProvenance ?? "manual",
           date: isEvent ? eventDate.trim() || null : undefined,
@@ -240,14 +258,14 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
           <input
             value={directTitle}
             onChange={(e) => setDirectTitle(e.target.value)}
-            placeholder={type === "song" ? "Title" : "Name"}
+            placeholder="Title"
             className={inputClass}
             autoFocus
           />
           <input
             value={directSubtitle}
             onChange={(e) => setDirectSubtitle(e.target.value)}
-            placeholder={type === "song" ? "Artist" : "City"}
+            placeholder="Artist"
             className={inputClass}
           />
           <button
@@ -270,6 +288,21 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
             autoFocus
           />
           <button disabled={!movieTitle.trim()} className="text-sm px-3 py-1.5 rounded-md text-white disabled:opacity-40" style={{ background: "var(--slate)" }}>
+            Search
+          </button>
+        </form>
+      )}
+
+      {step === "form" && isPlace && (
+        <form onSubmit={handleSearchSubmit} className="space-y-2">
+          <input
+            value={placeQuery}
+            onChange={(e) => setPlaceQuery(e.target.value)}
+            placeholder={type === "restaurant" ? "Restaurant name" : "Venue name"}
+            className={inputClass}
+            autoFocus
+          />
+          <button disabled={!placeQuery.trim()} className="text-sm px-3 py-1.5 rounded-md text-white disabled:opacity-40" style={{ background: "var(--slate)" }}>
             Search
           </button>
         </form>
@@ -405,9 +438,14 @@ export default function InListSearchForm({ list, homeCity }: { list: ListInfo; h
           <input
             value={confirmSubtitle}
             onChange={(e) => setConfirmSubtitle(e.target.value)}
-            placeholder={isCreator ? "Handle" : "Subtitle"}
-            className={`${inputClass} mb-3 opacity-70`}
+            placeholder={isCreator ? "Handle" : isPlace ? "City" : "Subtitle"}
+            className={`${inputClass} ${confirmSourceUrl ? "mb-1.5" : "mb-3"} opacity-70`}
           />
+          {confirmSourceUrl && (
+            <p className="text-xs opacity-50 mb-3 truncate">
+              Source: <a href={confirmSourceUrl} target="_blank" rel="noopener noreferrer" className="underline">{confirmSourceUrl}</a>
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               onClick={handleConfirmSave}

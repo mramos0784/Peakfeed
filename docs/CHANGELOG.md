@@ -2,6 +2,37 @@
 
 Running log of what shipped, in plain terms. Newest first.
 
+## 2026-08-12 — Restaurant + Venue search: real search instead of direct-create
+
+See `docs/adr/0012-restaurant-search.md` for full reasoning. Fixes a
+reported bug (typed input was just being saved as-is, no search
+happened) — that was intentional-but-confusing behavior from ADR 0008,
+not a defect, since Restaurants/Venues had no live catalog to search
+against. Restaurant shipped first, Venue extended immediately after in
+the same session since both categories share the exact same dedup and
+geocoding shape.
+
+- Restaurant and Venue move off `DIRECT_CREATE_TYPES` in
+  `InListSearchForm.tsx` and `AddToListsButton.tsx`, onto the same
+  Wikidata + web-search flow Films/Events/Issues/Creators already use —
+  free, no Google Places billing account needed. Song is now the only
+  remaining direct-create category.
+- `webSearchCandidates()`'s prompt now asks for a restaurant/venue's
+  `subtitle` to be just city/neighborhood (not a tagline), since that
+  string is what the existing geocode job (ADR 0007) feeds Nominatim for
+  the map pin — confirmed this already works without a street address.
+  `InListSearchForm.tsx` falls back to the user's own city
+  (`profiles.city`, already threaded through since ADR 0008) if a search
+  result comes back with no subtitle at all.
+- Added `source_url` to `SearchCandidate`, verified against the search
+  API's own real result URLs before being trusted (never a model-typed
+  guess) — shown as a link on the confirm step so a save can actually be
+  checked against a real source before it happens. Wikidata candidates
+  get one too (a link to the Wikidata item itself).
+- Not live-tested this session — no signed-in browser session was
+  available. `tsc --noEmit` and `eslint` both pass clean; founder should
+  verify the actual search-and-save flow for both categories.
+
 ## 2026-07-21 — Follow/unfollow, public profiles, username search
 
 See `docs/adr/0011-follow-unfollow.md` for full reasoning and live-test

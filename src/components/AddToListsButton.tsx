@@ -8,12 +8,14 @@ import type { ResolutionProvenance } from "@/lib/parseLink";
 type ListContext = { slug: string; name: string; type: string };
 
 // The two independent search sources fire in parallel for these categories
-// (docs/adr/0006) - Wikidata + web search simultaneously, no gate. Every
-// other category still uses the single-link-resolve flow only; typed text
-// there shows "coming soon" until real category APIs (Spotify Search,
-// Google Places) get built.
+// (docs/adr/0006) - Wikidata + web search simultaneously, no gate. Restaurant
+// and Venue joined this list once Google Places was dropped in favor of
+// reusing this same free flow (see InListSearchForm.tsx, ADR 0012). Song is
+// the only category left using the single-link-resolve flow only; typed
+// text there shows "coming soon" until a real category API (Spotify Search)
+// gets built.
 const MULTI_SEARCH_CATEGORIES = [
-  "movie", "event", "issue", "x_creator", "tiktok_creator", "instagram_creator", "youtube_creator",
+  "movie", "event", "issue", "restaurant", "venue", "x_creator", "tiktok_creator", "instagram_creator", "youtube_creator",
 ];
 
 type SearchCandidate = {
@@ -24,6 +26,7 @@ type SearchCandidate = {
   external_id: string | null;
   provenance: ResolutionProvenance;
   sourceLabel: string;
+  source_url: string | null;
 };
 
 // What the confirm step actually needs, regardless of whether it came from
@@ -206,7 +209,7 @@ export default function AddToListsButton({
     setSubtitle(c.subtitle ?? "");
     setExternalId(c.external_id);
     setImageUrl(c.image_url);
-    setSourceUrl(null); // no literal pasted URL behind a search-selected candidate
+    setSourceUrl(c.source_url);
     setEventDate(null);
     setEventSources(null);
     setPending({
